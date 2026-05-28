@@ -2,6 +2,17 @@
   <div class="sidebar">
     <div class="panel-header"><span>⚙</span> FILTERS</div>
 
+    <!-- Refresh button -->
+    <div class="filter-section">
+      <button class="refresh-btn" @click="store.fetchAllData()" :disabled="store.loading">
+        <span :class="{ spinning: store.loading }">↻</span>
+        {{ store.loading ? 'Loading…' : 'Refresh Data' }}
+      </button>
+      <div v-if="store.lastUpdated" class="last-updated">
+        Updated {{ formatTime(store.lastUpdated) }}
+      </div>
+    </div>
+
     <!-- Date Range -->
     <div class="filter-section">
       <div class="filter-label">DATE RANGE</div>
@@ -55,7 +66,7 @@
           Clear
         </button>
       </div>
-      <label v-for="et in eventTypes" :key="et" class="type-toggle">
+      <label v-for="et in store.eventTypes" :key="et" class="type-toggle">
         <input type="checkbox" :value="et" v-model="filters.eventTypes" />
         <span>{{ et }}</span>
       </label>
@@ -78,30 +89,12 @@
       </div>
       <div class="stat-row">
         <span class="stat-key">Critical</span>
-        <span class="stat-num" style="color:#ef4444">{{ store.stats.bySeverity.critical }}</span>
-      </div>
-      <div class="stat-row">
-        <span class="stat-key">High</span>
-        <span class="stat-num" style="color:#f59e0b">{{ store.stats.bySeverity.high }}</span>
+        <span class="stat-num text-red-500">{{ store.stats.bySeverity.critical }}</span>
       </div>
     </div>
 
-    <!-- Last updated -->
-    <div v-if="store.lastUpdated" class="filter-section">
-      <div class="filter-label">LAST UPDATED</div>
-      <div class="last-updated">{{ formatDate(store.lastUpdated) }}</div>
-    </div>
-
-    <!-- Refresh -->
-    <div class="filter-section">
-      <button class="refresh-btn" @click="store.loadAllData()" :disabled="store.loading">
-        <span :class="{ spinning: store.loading }">↻</span>
-        {{ store.loading ? 'Loading…' : 'Refresh Data' }}
-      </button>
-    </div>
-
-    <!-- Error -->
-    <div v-if="store.error" class="filter-section error-section">
+    <!-- Error display -->
+    <div v-if="store.error" class="error-box">
       ⚠ {{ store.error }}
     </div>
   </div>
@@ -111,39 +104,31 @@
 import { computed } from 'vue'
 import { useConflictsStore } from '@/stores/conflicts'
 import dayjs from 'dayjs'
+import relativeTime from 'dayjs/plugin/relativeTime'
+dayjs.extend(relativeTime)
 
 const store   = useConflictsStore()
 const filters = store.filters
 
 const sources = [
-  { id: 'acled',     label: 'ACLED',     color: '#ef4444' },
-  { id: 'ucdp',      label: 'UCDP',      color: '#f59e0b' },
-  { id: 'gdelt',     label: 'GDELT',     color: '#06b6d4' },
-  { id: 'reliefweb', label: 'ReliefWeb', color: '#10b981' },
+  { id: 'acled',     label: 'ACLED',      color: '#ef4444' },
+  { id: 'ucdp',      label: 'UCDP',       color: '#f59e0b' },
+  { id: 'gdelt',     label: 'GDELT',      color: '#6366f1' },
+  { id: 'reliefweb', label: 'ReliefWeb',  color: '#10b981' },
 ]
 
 const severities = [
   { id: 'critical', label: 'Critical (100+ fatalities)', color: '#ef4444' },
   { id: 'high',     label: 'High (20–99)',               color: '#f59e0b' },
-  { id: 'medium',   label: 'Medium (5–19)',              color: '#3b82f6' },
-  { id: 'low',      label: 'Low (0–4)',                  color: '#10b981' },
-]
-
-const eventTypes = [
-  'Battles',
-  'Violence against civilians',
-  'Explosions/Remote violence',
-  'Protests',
-  'Riots',
-  'Strategic developments',
-  'Armed Conflict',
+  { id: 'medium',   label: 'Medium (5–19)',              color: '#eab308' },
+  { id: 'low',      label: 'Low (0–4)',                  color: '#3b82f6' },
 ]
 
 const sourceCounts = computed(() => {
   const counts = { acled: 0, ucdp: 0, gdelt: 0, reliefweb: 0 }
   store.allEvents.forEach(e => {
-    const key = e.source.toLowerCase()
-    if (counts[key] !== undefined) counts[key]++
+    const k = e.source.toLowerCase()
+    if (counts[k] !== undefined) counts[k]++
   })
   return counts
 })
@@ -156,25 +141,50 @@ const severityCounts = computed(() => {
   return counts
 })
 
-function formatDate(iso) {
-  return dayjs(iso).format('MMM D, YYYY HH:mm')
+function formatTime(iso) {
+  return dayjs(iso).fromNow()
 }
 </script>
 
 <style scoped>
 .sidebar {
-  background: #0d1424;
+  width: 220px;
+  min-width: 220px;
   height: 100%;
-  overflow-y: auto;
+  background: #0d1424;
   border-right: 1px solid #1e2d45;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
 }
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb { background: #1e2d45; border-radius: 2px; }
+
+.panel-header {
+  padding: 10px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #475569;
+  text-transform: uppercase;
+  border-bottom: 1px solid #1e2d45;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .filter-section {
   padding: 10px 12px;
-  border-bottom: 1px solid #1a2235;
+  border-bottom: 1px solid #0f1929;
 }
+
 .filter-label {
   font-size: 9px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.1em;
   color: #475569;
   text-transform: uppercase;
@@ -188,14 +198,15 @@ function formatDate(iso) {
   color: #3b82f6;
   font-size: 10px;
 }
+
 .date-input {
   width: 100%;
   background: #111827;
   border: 1px solid #1e2d45;
-  border-radius: 4px;
+  border-radius: 3px;
   color: #94a3b8;
-  font-size: 11px;
-  padding: 5px 8px;
+  font-size: 10px;
+  padding: 4px 6px;
   margin-bottom: 4px;
   outline: none;
 }
@@ -210,81 +221,107 @@ function formatDate(iso) {
   display: flex;
   justify-content: space-between;
   font-size: 8px;
-  color: #475569;
+  color: #334155;
   margin-top: 2px;
 }
 
-.source-toggle, .type-toggle {
+.source-toggle {
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin-bottom: 5px;
+  gap: 6px;
   cursor: pointer;
-  font-size: 11px;
+  padding: 3px 0;
+  font-size: 10px;
   color: #94a3b8;
 }
-.source-toggle input, .type-toggle input {
-  accent-color: #3b82f6;
-  cursor: pointer;
-}
+.source-toggle input[type="checkbox"] { accent-color: #3b82f6; cursor: pointer; }
 .toggle-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
 }
-.toggle-label { flex: 1; }
+.toggle-label { flex: 1; font-size: 10px; }
 .toggle-count {
   font-family: 'JetBrains Mono', monospace;
   font-size: 9px;
   color: #475569;
 }
 
-.clear-btn {
+.type-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  padding: 2px 0;
   font-size: 9px;
-  color: #ef4444;
+  color: #64748b;
+}
+.type-toggle input[type="checkbox"] { accent-color: #3b82f6; cursor: pointer; }
+
+.clear-btn {
   background: transparent;
   border: none;
+  color: #3b82f6;
+  font-size: 9px;
   cursor: pointer;
   padding: 0;
 }
+.clear-btn:hover { color: #60a5fa; }
 
 .stats-summary {}
 .stat-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  padding: 3px 0;
+  font-size: 10px;
 }
-.stat-key { font-size: 10px; color: #64748b; }
-.stat-num { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; }
-
-.last-updated { font-size: 10px; color: #475569; font-family: 'JetBrains Mono', monospace; }
+.stat-key { color: #475569; }
+.stat-num { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 11px; }
+.text-blue-400  { color: #60a5fa; }
+.text-red-400   { color: #f87171; }
+.text-red-500   { color: #ef4444; }
+.text-amber-400 { color: #fbbf24; }
 
 .refresh-btn {
   width: 100%;
-  padding: 7px 12px;
-  background: rgba(59,130,246,0.08);
-  border: 1px solid rgba(59,130,246,0.25);
-  border-radius: 5px;
+  padding: 6px 10px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid #1e3a5f;
+  border-radius: 4px;
   color: #3b82f6;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
 }
-.refresh-btn:hover:not(:disabled) { background: rgba(59,130,246,0.15); }
-.refresh-btn:disabled { opacity: 0.5; cursor: default; }
-
-.spinning {
-  display: inline-block;
-  animation: spin 1s linear infinite;
+.refresh-btn:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: #3b82f6;
 }
+.refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.spinning { display: inline-block; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.error-section { font-size: 10px; color: #ef4444; }
+.last-updated {
+  font-size: 9px;
+  color: #334155;
+  text-align: center;
+  margin-top: 4px;
+}
+
+.error-box {
+  margin: 8px 12px;
+  padding: 6px 8px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 4px;
+  font-size: 9px;
+  color: #f87171;
+}
 </style>

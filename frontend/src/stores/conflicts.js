@@ -3,7 +3,6 @@ import { ref, computed } from 'vue'
 import { fetchACLEDEvents, fetchUCDPEvents, fetchGDELTEvents, fetchReliefWebCrises } from '@/services/dataService'
 import dayjs from 'dayjs'
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 function severityFromFatalities(n) {
   if (n >= 100) return 'critical'
   if (n >= 20)  return 'high'
@@ -25,21 +24,18 @@ function colorByType(type) {
 }
 
 export const useConflictsStore = defineStore('conflicts', () => {
-  // ── Raw data ─────────────────────────────────────────────────────────────
   const acledEvents     = ref([])
   const ucdpConflicts   = ref([])
   const gdeltEvents     = ref([])
   const reliefWebCrises = ref([])
 
-  // ── UI state ──────────────────────────────────────────────────────────────
   const loading         = ref(false)
   const error           = ref(null)
   const selectedEvent   = ref(null)
   const selectedCountry = ref(null)
-  const activeView      = ref('globe')   // 'globe' | 'deck' | 'split'
+  const activeView      = ref('globe')
   const lastUpdated     = ref(null)
 
-  // ── Filters ───────────────────────────────────────────────────────────────
   const filters = ref({
     dateFrom:      '2023-01-01',
     dateTo:        new Date().toISOString().slice(0, 10),
@@ -50,7 +46,6 @@ export const useConflictsStore = defineStore('conflicts', () => {
     severity:      []
   })
 
-  // ── Merged / normalised events ────────────────────────────────────────────
   const allEvents = computed(() => {
     const events = []
 
@@ -111,14 +106,14 @@ export const useConflictsStore = defineStore('conflicts', () => {
         lat, lng,
         country:    e.ActionGeo_CountryCode || 'Unknown',
         date:       dateStr,
-        type:       e.EventCode ? `CAMEO:${e.EventCode}` : 'Event',
-        subtype:    e.EventBaseCode || '',
+        type:       'Conflict Event',
+        subtype:    `CAMEO ${e.EventCode}`,
         fatalities: 0,
         actor1:     e.Actor1Name || '',
         actor2:     e.Actor2Name || '',
         notes:      e.SOURCEURL || '',
         severity:   'low',
-        color:      [6, 182, 212],
+        color:      [99, 102, 241],
         position:   [lng, lat]
       })
     })
@@ -127,56 +122,67 @@ export const useConflictsStore = defineStore('conflicts', () => {
   })
 
   const filteredEvents = computed(() => {
-    return allEvents.value.filter(e => {
-      if (!filters.value.sources[e.source.toLowerCase()]) return false
-      if (e.fatalities < filters.value.minFatalities) return false
-      if (filters.value.countries.length && !filters.value.countries.includes(e.country)) return false
-      if (filters.value.eventTypes.length && !filters.value.eventTypes.includes(e.type)) return false
-      if (filters.value.severity.length && !filters.value.severity.includes(e.severity)) return false
-      if (e.date && e.date < filters.value.dateFrom) return false
-      if (e.date && e.date > filters.value.dateTo) return false
-      return true
+    let evts = allEvents.value
+
+    // Source filter
+    evts = evts.filter(e => {
+      const src = e.source.toLowerCase()
+      return filters.value.sources[src] !== false
     })
+
+    // Date filter
+    if (filters.value.dateFrom) {
+      evts = evts.filter(e => !e.date || e.date >= filters.value.dateFrom)
+    }
+    if (filters.value.dateTo) {
+      evts = evts.filter(e => !e.date || e.date <= filters.value.dateTo)
+    }
+
+    // Min fatalities
+    if (filters.value.minFatalities > 0) {
+      evts = evts.filter(e => e.fatalities >= filters.value.minFatalities)
+    }
+
+    // Event types
+    if (filters.value.eventTypes.length > 0) {
+      evts = evts.filter(e => filters.value.eventTypes.includes(e.type))
+    }
+
+    // Severity
+    if (filters.value.severity.length > 0) {
+      evts = evts.filter(e => filters.value.severity.includes(e.severity))
+    }
+
+    // Countries
+    if (filters.value.countries.length > 0) {
+      evts = evts.filter(e => filters.value.countries.includes(e.country))
+    }
+
+    return evts
   })
 
   const stats = computed(() => {
     const evts = filteredEvents.value
     const countries = new Set(evts.map(e => e.country)).size
     const totalFatalities = evts.reduce((s, e) => s + e.fatalities, 0)
-    const highSeverity = evts.filter(e => e.severity === 'critical' || e.severity === 'high').length
     const bySeverity = { critical: 0, high: 0, medium: 0, low: 0 }
-    evts.forEach(e => { if (bySeverity[e.severity] !== undefined) bySeverity[e.severity]++ })
+    evts.forEach(e => { bySeverity[e.severity] = (bySeverity[e.severity] || 0) + 1 })
+    const bySource = {}
+    evts.forEach(e => { bySource[e.source] = (bySource[e.source] || 0) + 1 })
     return {
-      totalEvents:     evts.length,
+      totalEvents: evts.length,
       totalFatalities,
       countries,
-      highSeverity,
-      bySeverity
+      bySeverity,
+      bySource,
     }
   })
 
-  const eventsByCountry = computed(() => {
-    const map = {}
-    filteredEvents.value.forEach(e => {
-      if (!map[e.country]) map[e.country] = { count: 0, fatalities: 0, events: [] }
-      map[e.country].count++
-      map[e.country].fatalities += e.fatalities
-      if (map[e.country].events.length < 5) map[e.country].events.push(e)
-    })
-    return map
-  })
-
-  const topCountries = computed(() => {
-    return Object.entries(eventsByCountry.value)
-      .map(([country, d]) => ({ country, ...d }))
-      .sort((a, b) => b.fatalities - a.fatalities)
-      .slice(0, 10)
-  })
-
   const timelineData = computed(() => {
+    const evts = filteredEvents.value
     const byMonth = {}
-    filteredEvents.value.forEach(e => {
-      if (!e.date || e.date.length < 7) return
+    evts.forEach(e => {
+      if (!e.date) return
       const month = e.date.slice(0, 7)
       if (!byMonth[month]) byMonth[month] = { date: month, count: 0, fatalities: 0 }
       byMonth[month].count++
@@ -185,39 +191,41 @@ export const useConflictsStore = defineStore('conflicts', () => {
     return Object.values(byMonth).sort((a, b) => a.date.localeCompare(b.date))
   })
 
-  const arcData = computed(() => {
-    const high = filteredEvents.value.filter(e => e.severity === 'critical' || e.severity === 'high')
-    const arcs = []
-    for (let i = 0; i < Math.min(high.length - 1, 80); i++) {
-      const a = high[i], b = high[i + 1]
-      if (Math.abs(a.lat - b.lat) > 0.5 || Math.abs(a.lng - b.lng) > 0.5) {
-        arcs.push({
-          startLat: a.lat, startLng: a.lng,
-          endLat:   b.lat, endLng:   b.lng,
-          color:    ['rgba(239,68,68,0.6)', 'rgba(245,158,11,0.6)'],
-          value:    a.fatalities + b.fatalities
-        })
-      }
-    }
-    return arcs
+  const topCountries = computed(() => {
+    const evts = filteredEvents.value
+    const map = {}
+    evts.forEach(e => {
+      if (!map[e.country]) map[e.country] = { country: e.country, count: 0, fatalities: 0 }
+      map[e.country].count++
+      map[e.country].fatalities += e.fatalities
+    })
+    return Object.values(map).sort((a, b) => b.fatalities - a.fatalities)
   })
 
-  // ── Actions ───────────────────────────────────────────────────────────────
-  async function loadAllData() {
+  const eventTypes = computed(() => {
+    const types = new Set(allEvents.value.map(e => e.type))
+    return [...types].sort()
+  })
+
+  const countryList = computed(() => {
+    const countries = new Set(allEvents.value.map(e => e.country))
+    return [...countries].sort()
+  })
+
+  async function fetchAllData() {
     loading.value = true
     error.value   = null
     try {
-      const f = filters.value
       const [acled, ucdp, gdelt, rw] = await Promise.allSettled([
-        fetchACLEDEvents(f),
-        fetchUCDPEvents(f),
-        fetchGDELTEvents(f),
-        fetchReliefWebCrises(f),
+        fetchACLEDEvents(filters.value),
+        fetchUCDPEvents(filters.value),
+        fetchGDELTEvents(filters.value),
+        fetchReliefWebCrises(filters.value),
       ])
-      if (acled.status === 'fulfilled')  acledEvents.value     = acled.value
-      if (ucdp.status === 'fulfilled')   ucdpConflicts.value   = ucdp.value
-      if (gdelt.status === 'fulfilled')  gdeltEvents.value     = gdelt.value
-      if (rw.status === 'fulfilled')     reliefWebCrises.value = rw.value
+      if (acled.status  === 'fulfilled') acledEvents.value     = acled.value
+      if (ucdp.status   === 'fulfilled') ucdpConflicts.value   = ucdp.value
+      if (gdelt.status  === 'fulfilled') gdeltEvents.value     = gdelt.value
+      if (rw.status     === 'fulfilled') reliefWebCrises.value = rw.value
       lastUpdated.value = new Date().toISOString()
     } catch (err) {
       error.value = err.message
@@ -226,13 +234,9 @@ export const useConflictsStore = defineStore('conflicts', () => {
     }
   }
 
-  function selectEvent(evt) {
-    selectedEvent.value   = evt
-    selectedCountry.value = evt?.country || null
-  }
-
-  function setActiveView(v) {
-    activeView.value = v
+  function selectEvent(event) {
+    selectedEvent.value   = event
+    selectedCountry.value = event?.country || null
   }
 
   function clearSelection() {
@@ -240,11 +244,21 @@ export const useConflictsStore = defineStore('conflicts', () => {
     selectedCountry.value = null
   }
 
+  function setActiveView(view) {
+    activeView.value = view
+  }
+
+  function updateFilters(newFilters) {
+    filters.value = { ...filters.value, ...newFilters }
+  }
+
   return {
     acledEvents, ucdpConflicts, gdeltEvents, reliefWebCrises,
-    loading, error, selectedEvent, selectedCountry, activeView, lastUpdated,
-    filters, allEvents, filteredEvents, stats, eventsByCountry,
-    topCountries, timelineData, arcData,
-    loadAllData, selectEvent, setActiveView, clearSelection
+    loading, error, selectedEvent, selectedCountry,
+    activeView, lastUpdated, filters,
+    allEvents, filteredEvents, stats, timelineData,
+    topCountries, eventTypes, countryList,
+    fetchAllData, selectEvent, clearSelection,
+    setActiveView, updateFilters,
   }
 })

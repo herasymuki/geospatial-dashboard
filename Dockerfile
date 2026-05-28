@@ -3,7 +3,7 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/.npmrc ./
-RUN npm install
+RUN npm install --legacy-peer-deps
 
 COPY frontend/ ./
 RUN npm run build
@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./
 
-# Vue build output → static/
+# Vue build output -> static/
 COPY --from=frontend-builder /app/frontend/dist ./static
 
 ENV PORT=8080

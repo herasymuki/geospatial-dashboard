@@ -68,6 +68,7 @@
 </template>
 
 <script setup>
+import { onMounted } from 'vue'
 import { useConflictsStore } from '@/stores/conflicts'
 import StatBar        from '@/components/ui/StatBar.vue'
 import FilterSidebar  from '@/components/sidebar/FilterSidebar.vue'
@@ -83,6 +84,10 @@ const views = [
   { id: 'deck',  label: '🗺 Deck Map' },
   { id: 'split', label: '⊞ Split'    },
 ]
+
+onMounted(() => {
+  store.fetchAllData()
+})
 </script>
 
 <style scoped>
@@ -93,6 +98,7 @@ const views = [
   width: 100vw;
   overflow: hidden;
   background: #0a0e1a;
+  font-family: 'Inter', 'JetBrains Mono', system-ui, sans-serif;
 }
 
 /* ── Top Bar ── */
@@ -137,51 +143,46 @@ const views = [
   transition: all 0.15s;
 }
 .view-tab:hover  { color: #94a3b8; border-color: #1e2d45; }
-.view-tab.active { color: #3b82f6; background: rgba(59,130,246,0.1); border-color: rgba(59,130,246,0.3); }
+.view-tab.active { color: #e2e8f0; border-color: #3b82f6; background: rgba(59,130,246,0.1); }
 
 .live-badge {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 10px;
+  gap: 5px;
+  font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   color: #10b981;
 }
 .pulse {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #10b981;
-  animation: pulse-anim 2s infinite;
+  animation: pulse-anim 2s ease-in-out infinite;
 }
 @keyframes pulse-anim {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.5; transform: scale(1.3); }
+  50%       { opacity: 0.4; transform: scale(1.4); }
 }
 
 /* ── Main Layout ── */
 .main-layout {
   flex: 1;
-  display: grid;
-  grid-template-columns: 200px 1fr 280px;
-  grid-template-rows: 1fr;
+  display: flex;
   min-height: 0;
   overflow: hidden;
 }
 
 .sidebar-col {
-  grid-column: 1;
-  min-height: 0;
-  overflow-y: auto;
+  flex-shrink: 0;
 }
 
 .centre-col {
-  grid-column: 2;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
+  min-width: 0;
   border-left: 1px solid #1e2d45;
   border-right: 1px solid #1e2d45;
 }
@@ -190,6 +191,7 @@ const views = [
   flex: 1;
   min-height: 0;
   position: relative;
+  overflow: hidden;
 }
 
 .view-full {
@@ -198,39 +200,56 @@ const views = [
 }
 
 .view-split {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
   width: 100%;
   height: 100%;
+  display: flex;
 }
-.split-half { min-width: 0; min-height: 0; }
+.split-half {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+.split-half + .split-half {
+  border-left: 1px solid #1e2d45;
+}
 
 .timeline-area {
-  height: 140px;
-  min-height: 140px;
   flex-shrink: 0;
   border-top: 1px solid #1e2d45;
+  background: #0d1424;
 }
 
 .right-col {
-  grid-column: 3;
+  width: 280px;
+  min-width: 280px;
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
+  background: #0d1424;
+  flex-shrink: 0;
 }
+
+/* ── Transitions ── */
+.view-fade-enter-active,
+.view-fade-leave-active { transition: opacity 0.2s ease; }
+.view-fade-enter-from,
+.view-fade-leave-to     { opacity: 0; }
+
+.fade-enter-active,
+.fade-leave-active { transition: opacity 0.3s; }
+.fade-enter-from,
+.fade-leave-to     { opacity: 0; }
 
 /* ── Loading overlay ── */
 .loading-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(10,14,26,0.8);
+  background: rgba(10, 14, 26, 0.85);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 16px;
-  z-index: 1000;
+  z-index: 9999;
   backdrop-filter: blur(4px);
 }
 .loading-spinner {
@@ -241,13 +260,10 @@ const views = [
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
-.loading-overlay p { font-size: 12px; color: #64748b; }
 @keyframes spin { to { transform: rotate(360deg); } }
-
-/* ── Transitions ── */
-.fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
-
-.view-fade-enter-active, .view-fade-leave-active { transition: opacity 0.2s; }
-.view-fade-enter-from, .view-fade-leave-to { opacity: 0; }
+.loading-overlay p {
+  font-size: 11px;
+  color: #475569;
+  letter-spacing: 0.08em;
+}
 </style>

@@ -96,7 +96,7 @@ const chartOptions = computed(() => ({
   plugins: {
     legend: { display: false },
     tooltip: {
-      backgroundColor: '#111827',
+      backgroundColor: 'rgba(13,20,36,0.95)',
       borderColor:     '#1e2d45',
       borderWidth:     1,
       titleColor:      '#94a3b8',
@@ -109,13 +109,13 @@ const chartOptions = computed(() => ({
   },
   scales: {
     x: {
-      grid:  { color: 'rgba(30,45,69,0.4)', drawBorder: false },
-      ticks: { color: '#475569', font: { size: 9 }, maxTicksLimit: 14 }
+      grid:  { color: '#0f1929', drawBorder: false },
+      ticks: { color: '#334155', font: { size: 9 }, maxTicksLimit: 12 },
     },
     y: {
-      grid:  { color: 'rgba(30,45,69,0.4)', drawBorder: false },
-      ticks: { color: '#475569', font: { size: 9 },
-               callback: v => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v }
+      grid:  { color: '#0f1929', drawBorder: false },
+      ticks: { color: '#334155', font: { size: 9 } },
+      beginAtZero: true,
     }
   }
 }))
@@ -123,43 +123,57 @@ const chartOptions = computed(() => ({
 
 <style scoped>
 .timeline-panel {
-  height: 100%;
+  height: 160px;
+  min-height: 160px;
   display: flex;
   flex-direction: column;
   border-radius: 0;
   border-left: none;
   border-right: none;
   border-bottom: none;
+  flex-shrink: 0;
 }
-.tl-tabs { display: flex; gap: 3px; margin-left: 10px; }
+.panel-header {
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #475569;
+  text-transform: uppercase;
+  border-bottom: 1px solid #1e2d45;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.tl-tabs { display: flex; gap: 2px; }
 .tl-tab {
   padding: 2px 8px;
   border-radius: 3px;
-  font-size: 10px;
+  font-size: 9px;
   color: #475569;
   background: transparent;
   border: 1px solid transparent;
   cursor: pointer;
   transition: all 0.12s;
 }
-.tl-tab:hover { color: #94a3b8; }
-.tl-tab.active {
-  color: #3b82f6;
-  border-color: rgba(59,130,246,0.3);
-  background: rgba(59,130,246,0.08);
-}
+.tl-tab:hover  { color: #94a3b8; }
+.tl-tab.active { color: #3b82f6; border-color: #1e3a5f; background: rgba(59,130,246,0.08); }
+.ml-2  { margin-left: 8px; }
+.ml-auto { margin-left: auto; }
+.text-xs { font-size: 10px; }
+
 .chart-wrap {
   flex: 1;
   padding: 6px 12px 8px;
   min-height: 0;
-  position: relative;
 }
 .no-data {
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
   font-size: 11px;
-  color: #475569;
+  color: #334155;
 }
 </style>

@@ -24,7 +24,7 @@
           <div class="tc-bar-wrap">
             <div class="tc-bar"
               :style="{
-                width: (c.fatalities / store.topCountries[0].fatalities * 100) + '%',
+                width: (c.fatalities / (store.topCountries[0]?.fatalities || 1) * 100) + '%',
                 background: fatalityColor(c.fatalities)
               }"
             ></div>
@@ -80,46 +80,33 @@
       <!-- Notes -->
       <div v-if="event.notes && !event.notes.startsWith('http')" class="section">
         <div class="section-label">NOTES</div>
-        <p class="notes-text">
-          {{ event.notes.slice(0, 280) }}{{ event.notes.length > 280 ? '…' : '' }}
-        </p>
+        <p class="notes-text">{{ event.notes.slice(0, 280) }}{{ event.notes.length > 280 ? '…' : '' }}</p>
       </div>
 
       <!-- Source link -->
       <div v-if="event.notes && event.notes.startsWith('http')" class="section">
-        <a :href="event.notes" target="_blank" class="source-link">
-          🔗 View source article ↗
+        <a :href="event.notes" target="_blank" rel="noopener" class="source-link">
+          🔗 View Source Article
         </a>
       </div>
 
       <!-- Country context -->
-      <div v-if="countryStats" class="section">
-        <div class="section-label">{{ event.country }} — DATASET TOTAL</div>
-        <div class="country-stats">
-          <div class="cs-item">
-            <span class="cs-val text-blue-400">{{ countryStats.count.toLocaleString() }}</span>
-            <span class="cs-lbl">events</span>
-          </div>
-          <div class="cs-item">
-            <span class="cs-val text-red-400">{{ countryStats.fatalities.toLocaleString() }}</span>
-            <span class="cs-lbl">fatalities</span>
-          </div>
+      <div v-if="countryContext" class="section">
+        <div class="section-label">COUNTRY CONTEXT</div>
+        <div class="ctx-row">
+          <span class="ctx-key">Total events</span>
+          <span class="ctx-val text-blue-400">{{ countryContext.count }}</span>
         </div>
-        <!-- Severity bar -->
-        <div class="sev-bar-wrap">
-          <div
-            v-for="(count, sev) in countrySeverityBreakdown"
-            :key="sev"
-            class="sev-seg"
-            :style="{ width: (count / countryStats.count * 100) + '%', background: sevColor(sev) }"
-            :title="`${sev}: ${count}`"
-          ></div>
+        <div class="ctx-row">
+          <span class="ctx-key">Total fatalities</span>
+          <span class="ctx-val text-red-400">{{ countryContext.fatalities.toLocaleString() }}</span>
         </div>
       </div>
 
-      <!-- AI Analysis button -->
-      <button class="ai-btn" @click="requestAI" :disabled="aiStore.streaming">
-        <span>✦</span> {{ aiStore.streaming ? 'Analysing…' : 'AI Intelligence Brief' }}
+      <!-- AI Brief button -->
+      <button class="ai-brief-btn" @click="requestAIBrief" :disabled="aiStore.streaming">
+        <span v-if="aiStore.streaming">⏳ Analyzing…</span>
+        <span v-else>✦ AI Intelligence Brief</span>
       </button>
     </div>
   </div>
@@ -135,47 +122,39 @@ const aiStore = useAIStore()
 
 const event = computed(() => store.selectedEvent)
 
-const severityBadge = computed(() => ({
-  critical: 'badge-red',
-  high:     'badge-amber',
-  medium:   'badge-blue',
-  low:      'badge-green',
-}[event.value?.severity] || 'badge-blue'))
-
-const countryStats = computed(() => {
-  if (!event.value?.country) return null
-  return store.eventsByCountry[event.value.country] || null
+const severityBadge = computed(() => {
+  const map = {
+    critical: 'badge-critical',
+    high:     'badge-high',
+    medium:   'badge-medium',
+    low:      'badge-low',
+  }
+  return map[event.value?.severity] || 'badge-low'
 })
 
-const countrySeverityBreakdown = computed(() => {
-  if (!event.value?.country) return {}
-  const evts = store.filteredEvents.filter(e => e.country === event.value.country)
-  const breakdown = { critical: 0, high: 0, medium: 0, low: 0 }
-  evts.forEach(e => { if (breakdown[e.severity] !== undefined) breakdown[e.severity]++ })
-  return breakdown
+const countryContext = computed(() => {
+  if (!event.value) return null
+  return store.topCountries.find(c => c.country === event.value.country) || null
 })
-
-function sevColor(sev) {
-  return { critical: '#ef4444', high: '#f59e0b', medium: '#3b82f6', low: '#10b981' }[sev] || '#475569'
-}
 
 function fatalityColor(n) {
-  if (n > 5000) return '#ef4444'
-  if (n > 1000) return '#f59e0b'
-  if (n > 200)  return '#eab308'
+  if (n >= 500) return '#ef4444'
+  if (n >= 100) return '#f59e0b'
+  if (n >= 20)  return '#eab308'
   return '#3b82f6'
 }
 
 function selectCountry(c) {
-  if (c.events?.length) store.selectEvent(c.events[0])
+  const evts = store.filteredEvents.filter(e => e.country === c.country)
+  if (evts.length) store.selectEvent(evts[0])
 }
 
-function requestAI() {
+function requestAIBrief() {
   if (!event.value) return
   aiStore.analyzeConflict({
     event:        event.value,
-    countryStats: countryStats.value,
-    totalEvents:  store.stats.totalEvents
+    countryStats: countryContext.value || {},
+    totalEvents:  store.stats.totalEvents,
   })
 }
 </script>
@@ -184,12 +163,43 @@ function requestAI() {
 .drilldown {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border-radius: 0;
-  border-top: none;
   border-right: none;
-  border-left: none;
+  border-top: none;
 }
+.panel-header {
+  padding: 8px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #475569;
+  text-transform: uppercase;
+  border-bottom: 1px solid #1e2d45;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.ml-auto { margin-left: auto; }
+.flex { display: flex; }
+.items-center { align-items: center; }
+.gap-2 { gap: 8px; }
+
+.badge {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.badge-critical { background: rgba(239,68,68,0.2);  color: #ef4444; }
+.badge-high     { background: rgba(245,158,11,0.2); color: #f59e0b; }
+.badge-medium   { background: rgba(234,179,8,0.2);  color: #eab308; }
+.badge-low      { background: rgba(59,130,246,0.2); color: #3b82f6; }
+
 .close-btn {
   background: transparent;
   border: none;
@@ -197,113 +207,153 @@ function requestAI() {
   cursor: pointer;
   font-size: 11px;
   padding: 0 2px;
+  line-height: 1;
 }
 .close-btn:hover { color: #ef4444; }
 
+/* Empty state */
 .empty-state {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 16px 12px;
   gap: 8px;
-  color: #475569;
-  font-size: 11px;
-  text-align: center;
 }
-.empty-icon { font-size: 24px; }
+.empty-icon { font-size: 24px; opacity: 0.4; }
+.empty-state p { font-size: 10px; color: #334155; text-align: center; }
 
 .top-countries { width: 100%; margin-top: 8px; }
-.tc-label { font-size: 9px; font-weight: 600; letter-spacing: 0.1em; color: #475569; margin-bottom: 8px; text-align: left; }
+.tc-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #334155;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
 .tc-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 5px;
+  padding: 4px 0;
   cursor: pointer;
-  padding: 3px 4px;
   border-radius: 3px;
   transition: background 0.1s;
 }
-.tc-row:hover { background: rgba(59,130,246,0.06); }
-.tc-name { font-size: 10px; color: #94a3b8; width: 80px; flex-shrink: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tc-bar-wrap { flex: 1; height: 4px; background: #1a2235; border-radius: 2px; overflow: hidden; }
+.tc-row:hover { background: rgba(59,130,246,0.05); }
+.tc-name { font-size: 9px; color: #94a3b8; width: 70px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-bar-wrap { flex: 1; height: 4px; background: #0f1929; border-radius: 2px; overflow: hidden; }
 .tc-bar { height: 100%; border-radius: 2px; transition: width 0.3s; }
-.tc-val { font-size: 9px; color: #64748b; font-family: 'JetBrains Mono', monospace; width: 40px; text-align: right; }
+.tc-val { font-size: 9px; font-family: 'JetBrains Mono', monospace; color: #475569; width: 40px; text-align: right; }
 
-.event-detail { padding: 10px 12px; }
-.detail-header { margin-bottom: 10px; }
-.detail-type { font-size: 13px; font-weight: 600; color: #e2e8f0; margin-bottom: 2px; }
-.detail-sub  { font-size: 11px; color: #64748b; margin-bottom: 5px; }
-.detail-meta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 10px; color: #64748b; }
+/* Event detail */
+.event-detail {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.event-detail::-webkit-scrollbar { width: 3px; }
+.event-detail::-webkit-scrollbar-thumb { background: #1e2d45; }
+
+.detail-header {}
+.detail-type { font-size: 12px; font-weight: 700; color: #e2e8f0; margin-bottom: 2px; }
+.detail-sub  { font-size: 10px; color: #64748b; margin-bottom: 4px; }
+.detail-meta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 9px; color: #475569; }
 .source-tag {
-  padding: 1px 6px;
+  padding: 1px 5px;
   border-radius: 3px;
-  font-size: 9px;
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 8px;
+  letter-spacing: 0.06em;
 }
 .src-acled     { background: rgba(239,68,68,0.15);  color: #ef4444; }
 .src-ucdp      { background: rgba(245,158,11,0.15); color: #f59e0b; }
-.src-gdelt     { background: rgba(6,182,212,0.15);  color: #06b6d4; }
-.src-reliefweb { background: rgba(16,185,129,0.15); color: #10b981; }
+.src-gdelt     { background: rgba(99,102,241,0.15); color: #818cf8; }
+.src-reliefweb { background: rgba(16,185,129,0.15); color: #34d399; }
 
 .detail-stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
-  margin-bottom: 10px;
 }
-.stat-val { font-size: 16px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
-.stat-lbl { font-size: 9px; color: #475569; margin-top: 2px; }
+.stat-card {
+  background: #111827;
+  border: 1px solid #1e2d45;
+  border-radius: 4px;
+  padding: 6px 8px;
+  text-align: center;
+}
+.stat-val { font-size: 13px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.stat-lbl { font-size: 8px; color: #475569; text-transform: uppercase; margin-top: 2px; }
 
-.section { margin-bottom: 10px; }
+.text-red-400   { color: #f87171; }
+.text-green-400 { color: #4ade80; }
+.text-blue-400  { color: #60a5fa; }
+
+.section {}
 .section-label {
-  font-size: 9px;
-  font-weight: 600;
+  font-size: 8px;
+  font-weight: 700;
   letter-spacing: 0.1em;
-  color: #475569;
+  color: #334155;
+  text-transform: uppercase;
   margin-bottom: 5px;
 }
-.actor-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.actor { font-size: 10px; padding: 3px 8px; border-radius: 3px; }
-.actor-a { background: rgba(239,68,68,0.1);  color: #ef4444; }
-.actor-b { background: rgba(59,130,246,0.1); color: #3b82f6; }
-.vs { font-size: 9px; color: #475569; }
 
-.notes-text { font-size: 10px; color: #94a3b8; line-height: 1.5; }
-.source-link { font-size: 10px; color: #3b82f6; text-decoration: none; }
-.source-link:hover { text-decoration: underline; }
-
-.country-stats { display: flex; gap: 16px; margin-bottom: 6px; }
-.cs-item { display: flex; align-items: baseline; gap: 4px; }
-.cs-val  { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 700; }
-.cs-lbl  { font-size: 9px; color: #475569; }
-
-.sev-bar-wrap {
-  display: flex;
-  height: 5px;
+.actor-row { display: flex; align-items: center; gap: 8px; }
+.actor {
+  flex: 1;
+  font-size: 9px;
+  padding: 4px 6px;
   border-radius: 3px;
+  text-align: center;
   overflow: hidden;
-  gap: 1px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.sev-seg { height: 100%; transition: width 0.3s; }
+.actor-a { background: rgba(239,68,68,0.1);  color: #f87171; border: 1px solid rgba(239,68,68,0.2); }
+.actor-b { background: rgba(59,130,246,0.1); color: #60a5fa; border: 1px solid rgba(59,130,246,0.2); }
+.vs { font-size: 8px; color: #334155; flex-shrink: 0; }
 
-.ai-btn {
+.notes-text { font-size: 9px; color: #64748b; line-height: 1.5; }
+
+.source-link {
+  font-size: 9px;
+  color: #3b82f6;
+  text-decoration: none;
+}
+.source-link:hover { color: #60a5fa; text-decoration: underline; }
+
+.ctx-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  font-size: 9px;
+}
+.ctx-key { color: #475569; }
+.ctx-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+
+.ai-brief-btn {
   width: 100%;
-  margin-top: 10px;
-  padding: 7px 12px;
-  background: rgba(59,130,246,0.1);
+  padding: 8px;
+  background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(168,85,247,0.15));
   border: 1px solid rgba(59,130,246,0.3);
   border-radius: 5px;
-  color: #3b82f6;
-  font-size: 11px;
+  color: #93c5fd;
+  font-size: 10px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
+  margin-top: auto;
 }
-.ai-btn:hover:not(:disabled) { background: rgba(59,130,246,0.18); border-color: rgba(59,130,246,0.5); }
-.ai-btn:disabled { opacity: 0.5; cursor: default; }
+.ai-brief-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(59,130,246,0.25), rgba(168,85,247,0.25));
+  border-color: rgba(59,130,246,0.5);
+}
+.ai-brief-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

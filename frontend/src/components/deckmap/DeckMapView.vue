@@ -74,9 +74,7 @@ function toggleLayer(id) {
   rebuildLayers()
 }
 
-function buildLayers(
-  HeatmapLayer, ScatterplotLayer, ArcLayer, HexagonLayer
-) {
+function buildLayers(HeatmapLayer, ScatterplotLayer, ArcLayer, HexagonLayer) {
   const evts = store.filteredEvents
   const layers = []
 
@@ -130,141 +128,159 @@ function buildLayers(
           tooltip.visible = false
         }
       },
-      onClick: ({ object }) => { if (object) store.selectEvent(object) },
+      onClick: ({ object }) => {
+        if (object) store.selectEvent(object)
+      },
     }))
   }
 
-  if (activeLayers.arcs && store.arcData.length) {
+  if (activeLayers.arcs && evts.length) {
+    const high = evts.filter(e => e.severity === 'critical' || e.severity === 'high')
+    const arcData = []
+    for (let i = 0; i < Math.min(high.length - 1, 80); i++) {
+      const a = high[i], b = high[(i + 4) % high.length]
+      if (!a || !b) continue
+      if (Math.abs(a.lat - b.lat) < 0.3 && Math.abs(a.lng - b.lng) < 0.3) continue
+      arcData.push({ source: a, target: b })
+    }
     layers.push(new ArcLayer({
       id:             'arcs',
-      data:           store.arcData,
-      getSourcePosition: d => [d.startLng, d.startLat],
-      getTargetPosition: d => [d.endLng,   d.endLat],
-      getSourceColor:    [239, 68,  68,  160],
-      getTargetColor:    [245, 158, 11,  160],
-      getWidth:          d => Math.max(1, Math.min(4, (d.value || 0) / 50)),
-      widthMinPixels:    1,
-      pickable:          false,
+      data:           arcData,
+      getSourcePosition: d => [d.source.lng, d.source.lat],
+      getTargetPosition: d => [d.target.lng, d.target.lat],
+      getSourceColor: d => [...d.source.color, 160],
+      getTargetColor: d => [...d.target.color, 40],
+      getWidth:       d => d.source.severity === 'critical' ? 2 : 1,
+      pickable:       false,
     }))
   }
 
   if (activeLayers.hexagon && evts.length) {
     layers.push(new HexagonLayer({
-      id:              'hexagon',
-      data:            evts,
-      getPosition:     d => [d.lng, d.lat],
+      id:           'hexagon',
+      data:         evts,
+      getPosition:  d => [d.lng, d.lat],
       getElevationWeight: d => d.fatalities + 1,
-      elevationScale:  200,
-      extruded:        true,
-      radius:          80000,
-      coverage:        0.85,
+      elevationScale: 80,
+      extruded:     true,
+      radius:       50000,
+      coverage:     0.85,
       colorRange: [
-        [1,   152, 189],
-        [73,  227, 206],
-        [216, 254, 181],
-        [254, 237, 177],
-        [254, 173, 84],
-        [209, 55,  78],
+        [1,   152, 189, 200],
+        [73,  227, 206, 200],
+        [216, 254, 181, 200],
+        [254, 237, 177, 200],
+        [254, 173, 84,  200],
+        [209, 55,  78,  200],
       ],
-      pickable:        true,
-      onHover: ({ object, x, y }) => {
-        if (object) {
-          tooltip.visible = true
-          tooltip.x = x + 14
-          tooltip.y = y + 14
-          tooltip.data = {
-            type:       `Hexagon cluster`,
-            country:    `${object.points?.length || 0} events`,
-            date:       '',
-            fatalities: object.points?.reduce((s, p) => s + (p.source?.fatalities || 0), 0) || 0,
-            source:     'Aggregated',
-            actor1:     '',
-          }
-        } else {
-          tooltip.visible = false
-        }
-      },
+      pickable:     false,
     }))
   }
 
   return layers
 }
 
-let LayerClasses = null
+let _HeatmapLayer, _ScatterplotLayer, _ArcLayer, _HexagonLayer, _Deck
 
-async function rebuildLayers() {
-  if (!deckInstance || !LayerClasses) return
-  const { HeatmapLayer, ScatterplotLayer, ArcLayer, HexagonLayer } = LayerClasses
-  deckInstance.setProps({ layers: buildLayers(HeatmapLayer, ScatterplotLayer, ArcLayer, HexagonLayer) })
-}
+async function initDeck() {
+  if (!canvasRef.value || !mapRef.value) return
 
-onMounted(async () => {
-  await nextTick()
+  // Init Leaflet base map
+  const L = await import('leaflet')
+  await import('leaflet/dist/leaflet.css')
 
-  // ── Leaflet dark base map ─────────────────────────────────────────────────
-  const L = (await import('leaflet')).default
   leafletMap = L.map(mapRef.value, {
-    center:           [20, 10],
-    zoom:             2,
-    zoomControl:      false,
+    center:          [20, 10],
+    zoom:            2,
+    zoomControl:     false,
     attributionControl: false,
   })
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19,
-    subdomains: 'abcd',
-  }).addTo(leafletMap)
 
-  // ── Deck.gl ───────────────────────────────────────────────────────────────
-  const { Deck }          = await import('@deck.gl/core')
-  const { ScatterplotLayer, ArcLayer } = await import('@deck.gl/layers')
-  const { HeatmapLayer, HexagonLayer } = await import('@deck.gl/aggregation-layers')
+  L.tileLayer(
+    'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    { maxZoom: 19, subdomains: 'abcd' }
+  ).addTo(leafletMap)
 
-  LayerClasses = { HeatmapLayer, ScatterplotLayer, ArcLayer, HexagonLayer }
+  // Sync Deck with Leaflet
+  leafletMap.on('move', syncDeckView)
+  leafletMap.on('zoom', syncDeckView)
 
-  const getViewState = () => {
-    const c = leafletMap.getCenter()
-    return {
-      longitude: c.lng,
-      latitude:  c.lat,
+  // Init Deck.gl
+  const deckgl = await import('@deck.gl/core')
+  const layers = await import('@deck.gl/layers')
+  const aggLayers = await import('@deck.gl/aggregation-layers')
+
+  _Deck           = deckgl.Deck
+  _HeatmapLayer   = aggLayers.HeatmapLayer
+  _ScatterplotLayer = layers.ScatterplotLayer
+  _ArcLayer       = layers.ArcLayer
+  _HexagonLayer   = aggLayers.HexagonLayer
+
+  const center = leafletMap.getCenter()
+  deckInstance = new _Deck({
+    canvas:     canvasRef.value,
+    width:      '100%',
+    height:     '100%',
+    controller: false,
+    initialViewState: {
+      longitude: center.lng,
+      latitude:  center.lat,
+      zoom:      leafletMap.getZoom() - 1,
+      pitch:     0,
+      bearing:   0,
+    },
+    layers: buildLayers(_HeatmapLayer, _ScatterplotLayer, _ArcLayer, _HexagonLayer),
+    onWebGLInitialized: (gl) => {
+      gl.enable(gl.BLEND)
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+    },
+  })
+}
+
+function syncDeckView() {
+  if (!deckInstance || !leafletMap) return
+  const center = leafletMap.getCenter()
+  deckInstance.setProps({
+    viewState: {
+      longitude: center.lng,
+      latitude:  center.lat,
       zoom:      leafletMap.getZoom() - 1,
       pitch:     0,
       bearing:   0,
     }
-  }
-
-  deckInstance = new Deck({
-    canvas:           canvasRef.value,
-    width:            '100%',
-    height:           '100%',
-    controller:       false,
-    initialViewState: getViewState(),
-    layers:           buildLayers(HeatmapLayer, ScatterplotLayer, ArcLayer, HexagonLayer),
-    getTooltip:       null,
   })
+}
 
-  leafletMap.on('move zoom', () => {
-    deckInstance?.setProps({ viewState: getViewState() })
+function rebuildLayers() {
+  if (!deckInstance || !_HeatmapLayer) return
+  deckInstance.setProps({
+    layers: buildLayers(_HeatmapLayer, _ScatterplotLayer, _ArcLayer, _HexagonLayer)
   })
+}
 
-  roObserver = new ResizeObserver(() => {
-    if (containerRef.value) {
-      leafletMap?.invalidateSize()
-    }
+function resizeDeck() {
+  if (!deckInstance || !containerRef.value) return
+  deckInstance.setProps({
+    width:  containerRef.value.clientWidth,
+    height: containerRef.value.clientHeight,
   })
-  roObserver.observe(containerRef.value)
+  if (leafletMap) leafletMap.invalidateSize()
+}
+
+onMounted(async () => {
+  await nextTick()
+  await initDeck()
+  roObserver = new ResizeObserver(() => resizeDeck())
+  if (containerRef.value) roObserver.observe(containerRef.value)
 })
 
 onUnmounted(() => {
-  roObserver?.disconnect()
-  deckInstance?.finalize()
-  leafletMap?.remove()
+  if (roObserver) roObserver.disconnect()
+  if (deckInstance) { try { deckInstance.finalize() } catch {} }
+  if (leafletMap)   { try { leafletMap.remove()    } catch {} }
 })
 
-watch(
-  () => [store.filteredEvents, store.arcData],
-  () => rebuildLayers(),
-  { deep: false }
-)
+watch(() => store.filteredEvents, rebuildLayers, { deep: false })
 </script>
 
 <style scoped>
@@ -272,8 +288,8 @@ watch(
   position: relative;
   width: 100%;
   height: 100%;
-  overflow: hidden;
   background: #0a0e1a;
+  overflow: hidden;
 }
 .leaflet-base {
   position: absolute;
@@ -287,10 +303,11 @@ watch(
   pointer-events: none;
 }
 
+/* Layer toggles */
 .deck-controls {
   position: absolute;
   top: 12px;
-  right: 12px;
+  left: 12px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -298,7 +315,7 @@ watch(
 }
 .layer-btn {
   padding: 4px 10px;
-  background: rgba(13,20,36,0.9);
+  background: rgba(13, 20, 36, 0.88);
   border: 1px solid #1e2d45;
   border-radius: 4px;
   color: #64748b;
@@ -308,46 +325,48 @@ watch(
   backdrop-filter: blur(4px);
   white-space: nowrap;
 }
-.layer-btn:hover { color: #94a3b8; }
-.layer-btn.active { color: #3b82f6; border-color: rgba(59,130,246,0.4); background: rgba(59,130,246,0.1); }
+.layer-btn:hover  { color: #94a3b8; border-color: #3b82f6; }
+.layer-btn.active { color: #3b82f6; border-color: #3b82f6; background: rgba(59,130,246,0.12); }
 
+/* Tooltip */
 .deck-tooltip {
   position: absolute;
-  background: rgba(13,20,36,0.95);
+  pointer-events: none;
+  background: rgba(13, 20, 36, 0.95);
   border: 1px solid #1e2d45;
   border-radius: 6px;
   padding: 8px 12px;
-  pointer-events: none;
   z-index: 20;
   max-width: 220px;
-  backdrop-filter: blur(4px);
 }
-.tt-type    { font-size: 12px; font-weight: 600; color: #e2e8f0; margin-bottom: 3px; }
-.tt-country { font-size: 10px; color: #64748b; margin-bottom: 2px; }
-.tt-fatal   { font-size: 10px; color: #ef4444; margin-bottom: 2px; }
-.tt-actors  { font-size: 10px; color: #94a3b8; margin-bottom: 2px; }
-.tt-source  { font-size: 9px;  color: #475569; }
-
-.deck-stats {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  background: rgba(13,20,36,0.85);
-  border: 1px solid #1e2d45;
-  border-radius: 6px;
-  padding: 6px 10px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 10px;
-  backdrop-filter: blur(4px);
-  z-index: 10;
-}
-.ds-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; color: #3b82f6; }
-.ds-sep   { color: #1e2d45; }
-.ds-val   { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; }
-.ds-lbl   { color: #475569; font-size: 9px; }
+.tt-type    { font-size: 11px; font-weight: 700; color: #e2e8f0; margin-bottom: 3px; }
+.tt-country { font-size: 10px; color: #94a3b8; }
+.tt-fatal   { font-size: 10px; color: #ef4444; margin-top: 3px; }
+.tt-actors  { font-size: 9px;  color: #64748b; margin-top: 2px; }
+.tt-source  { font-size: 9px;  color: #334155; margin-top: 4px; }
 
 .tt-fade-enter-active, .tt-fade-leave-active { transition: opacity 0.1s; }
 .tt-fade-enter-from, .tt-fade-leave-to { opacity: 0; }
+
+/* Stats */
+.deck-stats {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(13, 20, 36, 0.82);
+  border: 1px solid #1e2d45;
+  border-radius: 20px;
+  padding: 4px 12px;
+  backdrop-filter: blur(4px);
+  z-index: 10;
+  font-size: 10px;
+}
+.ds-label { color: #3b82f6; font-weight: 700; font-size: 9px; letter-spacing: 0.1em; }
+.ds-sep   { color: #1e2d45; }
+.ds-val   { font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.ds-lbl   { color: #475569; }
+.text-blue-400 { color: #60a5fa; }
 </style>

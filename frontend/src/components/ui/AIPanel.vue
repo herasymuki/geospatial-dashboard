@@ -56,7 +56,6 @@ const renderedResponse = computed(() => {
   return marked.parse(aiStore.response)
 })
 
-// Auto-scroll as streaming arrives
 watch(() => aiStore.response, async () => {
   await nextTick()
   if (bodyRef.value) bodyRef.value.scrollTop = bodyRef.value.scrollHeight
@@ -74,6 +73,20 @@ watch(() => aiStore.response, async () => {
   border-left: none;
   border-bottom: none;
 }
+.panel-header {
+  padding: 8px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #475569;
+  text-transform: uppercase;
+  border-bottom: 1px solid #1e2d45;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.ml-auto { margin-left: auto; }
 .ai-controls { display: flex; align-items: center; gap: 4px; }
 .ai-select {
   background: #111827;
@@ -100,70 +113,96 @@ watch(() => aiStore.response, async () => {
   flex: 1;
   overflow-y: auto;
   padding: 10px 12px;
+  min-height: 0;
 }
+.ai-body::-webkit-scrollbar { width: 3px; }
+.ai-body::-webkit-scrollbar-thumb { background: #1e2d45; }
+
 .ai-empty {
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding-top: 10px;
+  text-align: center;
 }
-.ai-empty-icon { font-size: 20px; color: #1e2d45; }
-.ai-empty p { font-size: 11px; color: #475569; line-height: 1.5; text-align: center; }
-.ai-empty strong { color: #64748b; }
+.ai-empty-icon { font-size: 20px; opacity: 0.3; }
+.ai-empty p { font-size: 10px; color: #334155; }
+.ai-empty strong { color: #475569; }
 .ai-capabilities {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   justify-content: center;
+  margin-top: 4px;
 }
 .ai-capabilities span {
-  font-size: 9px;
-  padding: 2px 7px;
-  border-radius: 3px;
+  font-size: 8px;
+  padding: 2px 6px;
   background: rgba(59,130,246,0.08);
-  border: 1px solid rgba(59,130,246,0.2);
+  border: 1px solid rgba(59,130,246,0.15);
+  border-radius: 3px;
   color: #3b82f6;
 }
 
-.ai-error { font-size: 11px; color: #ef4444; display: flex; gap: 6px; align-items: flex-start; }
+.ai-error {
+  padding: 8px;
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: 4px;
+  font-size: 10px;
+  color: #f87171;
+}
 
 .ai-response {}
-.ai-meta { display: flex; gap: 4px; margin-bottom: 8px; }
+.ai-meta {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
 .ai-badge {
-  font-size: 9px;
-  padding: 1px 6px;
+  font-size: 8px;
+  padding: 1px 5px;
+  background: rgba(168,85,247,0.12);
+  border: 1px solid rgba(168,85,247,0.2);
   border-radius: 3px;
-  background: rgba(59,130,246,0.1);
-  border: 1px solid rgba(59,130,246,0.2);
-  color: #3b82f6;
+  color: #c084fc;
+  font-weight: 600;
+  letter-spacing: 0.05em;
 }
 
 .ai-content {
-  font-size: 11px;
+  font-size: 10px;
   color: #94a3b8;
-  line-height: 1.65;
+  line-height: 1.6;
 }
 .ai-content :deep(h1),
 .ai-content :deep(h2),
 .ai-content :deep(h3) {
   color: #e2e8f0;
-  font-size: 12px;
-  font-weight: 600;
-  margin: 10px 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  margin: 8px 0 4px;
 }
-.ai-content :deep(p)      { margin-bottom: 6px; }
-.ai-content :deep(ul)     { padding-left: 16px; margin-bottom: 6px; }
-.ai-content :deep(li)     { margin-bottom: 3px; }
-.ai-content :deep(strong) { color: #e2e8f0; }
-.ai-content :deep(em)     { color: #64748b; }
-.ai-content :deep(code)   { font-family: 'JetBrains Mono', monospace; font-size: 10px; background: #1a2235; padding: 1px 4px; border-radius: 2px; }
+.ai-content :deep(strong) { color: #cbd5e1; }
+.ai-content :deep(p)      { margin: 4px 0; }
+.ai-content :deep(ul),
+.ai-content :deep(ol)     { padding-left: 14px; margin: 4px 0; }
+.ai-content :deep(li)     { margin: 2px 0; }
+.ai-content :deep(code)   {
+  background: #111827;
+  border-radius: 2px;
+  padding: 1px 4px;
+  font-size: 9px;
+  color: #60a5fa;
+}
 
 .ai-cursor {
   display: inline-block;
-  animation: blink 0.65s infinite;
   color: #3b82f6;
-  font-size: 13px;
+  animation: blink 0.8s step-end infinite;
+  font-size: 12px;
 }
-@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes blink { 50% { opacity: 0; } }
 </style>

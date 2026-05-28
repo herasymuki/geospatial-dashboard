@@ -69,6 +69,7 @@ const hoveredEvent = ref(null)
 const tooltipPos   = reactive({ x: 0, y: 0 })
 let   globeInstance = null
 let   roObserver    = null
+let   rotateTimer   = null
 
 const legend = computed(() => {
   const evts = store.filteredEvents
@@ -103,119 +104,215 @@ function buildArcs(events) {
     arcs.push({
       startLat: a.lat, startLng: a.lng,
       endLat:   b.lat, endLng:   b.lng,
-      color:    ['rgba(239,68,68,0.7)', 'rgba(245,158,11,0.5)'],
+      color:    a.severity === 'critical' ? '#ef444488' : '#f59e0b66',
+      stroke:   a.severity === 'critical' ? 1.5 : 0.8,
     })
   }
   return arcs
 }
 
-onMounted(async () => {
-  await nextTick()
-  const GlobeGL = (await import('globe.gl')).default
+function buildRings(events) {
+  return events
+    .filter(e => e.severity === 'critical' || e.severity === 'high')
+    .slice(0, 40)
+    .map(e => ({
+      lat:    e.lat,
+      lng:    e.lng,
+      maxR:   e.severity === 'critical' ? 4 : 2.5,
+      propagationSpeed: e.severity === 'critical' ? 2.5 : 1.5,
+      repeatPeriod: e.severity === 'critical' ? 700 : 1200,
+      color:  e.severity === 'critical' ? '#ef4444' : '#f59e0b',
+    }))
+}
 
-  const w = containerRef.value?.clientWidth  || 800
-  const h = containerRef.value?.clientHeight || 600
+function pointColor(e) {
+  const map = {
+    'Battles':                    'rgba(239,68,68,0.85)',
+    'Violence against civilians': 'rgba(245,158,11,0.85)',
+    'Explosions/Remote violence': 'rgba(234,179,8,0.85)',
+    'Protests':                   'rgba(59,130,246,0.85)',
+    'Riots':                      'rgba(168,85,247,0.85)',
+    'Strategic developments':     'rgba(16,185,129,0.85)',
+    'Armed Conflict':             'rgba(245,158,11,0.85)',
+  }
+  return map[e.type] || 'rgba(100,116,139,0.7)'
+}
 
-  globeInstance = GlobeGL()(globeEl.value)
-    .width(w).height(h)
-    .backgroundColor('#0a0e1a')
-    // ── NASA textures ──────────────────────────────────────────────────────
-    .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
-    .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
-    .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
-    // ── Atmosphere ─────────────────────────────────────────────────────────
+function pointRadius(e) {
+  const base = { critical: 0.8, high: 0.55, medium: 0.38, low: 0.22 }
+  return base[e.severity] || 0.22
+}
+
+async function initGlobe() {
+  if (!globeEl.value) return
+  const { default: Globe } = await import('globe.gl')
+
+  globeInstance = Globe()(globeEl.value)
+    .width(globeEl.value.clientWidth || 600)
+    .height(globeEl.value.clientHeight || 500)
+    .backgroundColor('rgba(0,0,0,0)')
+    .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+    .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
+    .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
     .showAtmosphere(true)
-    .atmosphereColor('#1a3a6b')
+    .atmosphereColor('#1e40af')
     .atmosphereAltitude(0.18)
-    // ── Points ─────────────────────────────────────────────────────────────
     .pointsData(store.filteredEvents)
     .pointLat('lat')
     .pointLng('lng')
-    .pointAltitude(d => {
-      const base = { critical: 0.12, high: 0.08, medium: 0.04, low: 0.01 }
-      return base[d.severity] || 0.01
+    .pointColor(pointColor)
+    .pointRadius(pointRadius)
+    .pointAltitude(d => d.severity === 'critical' ? 0.04 : 0.01)
+    .pointResolution(6)
+    .pointLabel(d => `
+      <div style="background:#0d1424cc;border:1px solid #1e2d45;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:11px;color:#e2e8f0;max-width:220px">
+        <div style="color:${pointColor(d)};font-weight:700;margin-bottom:4px">${d.type}</div>
+        <div style="color:#94a3b8">${d.country} · ${d.date}</div>
+        ${d.fatalities > 0 ? `<div style="color:#ef4444;margin-top:4px">⚠ ${d.fatalities.toLocaleString()} fatalities</div>` : ''}
+        ${d.actor1 ? `<div style="color:#64748b;margin-top:2px;font-size:10px">${d.actor1}${d.actor2 ? ' vs ' + d.actor2 : ''}</div>` : ''}
+        <div style="color:#334155;margin-top:4px;font-size:9px">${d.source}</div>
+      </div>
+    `)
+    .onPointClick(d => {
+      store.selectEvent(d)
     })
-    .pointRadius(d => {
-      const base = { critical: 0.55, high: 0.4, medium: 0.28, low: 0.16 }
-      return base[d.severity] || 0.16
-    })
-    .pointColor(d => `rgba(${d.color[0]},${d.color[1]},${d.color[2]},0.88)`)
-    .pointsMerge(false)
-    .onPointHover((d, evt) => {
+    .onPointHover((d, prev) => {
       hoveredEvent.value = d || null
-      if (evt && d) {
-        tooltipPos.x = evt.clientX - (containerRef.value?.getBoundingClientRect().left || 0) + 14
-        tooltipPos.y = evt.clientY - (containerRef.value?.getBoundingClientRect().top  || 0) + 14
-      }
     })
-    .onPointClick(d => { if (d) store.selectEvent(d) })
-    // ── Arcs ───────────────────────────────────────────────────────────────
-    .arcsData(showArcs.value ? buildArcs(store.filteredEvents) : [])
-    .arcStartLat('startLat').arcStartLng('startLng')
-    .arcEndLat('endLat').arcEndLng('endLng')
-    .arcColor('color')
-    .arcAltitude(0.25)
-    .arcStroke(0.4)
-    .arcDashLength(0.35)
-    .arcDashGap(0.15)
-    .arcDashAnimateTime(2500)
-    // ── Pulse rings ────────────────────────────────────────────────────────
-    .ringsData(showRings.value
-      ? store.filteredEvents.filter(e => e.severity === 'critical')
-      : [])
-    .ringLat('lat').ringLng('lng')
-    .ringMaxRadius(d => d.fatalities > 200 ? 5 : 3)
-    .ringPropagationSpeed(1.8)
-    .ringRepeatPeriod(700)
-    .ringColor(() => t => `rgba(239,68,68,${(1 - t) * 0.8})`)
 
-  globeInstance.controls().autoRotate      = rotating.value
-  globeInstance.controls().autoRotateSpeed = 0.35
-  globeInstance.controls().enableZoom      = true
-  globeInstance.pointOfView({ lat: 20, lng: 10, altitude: 2.2 }, 0)
+  // Arcs
+  if (showArcs.value) {
+    const arcs = buildArcs(store.filteredEvents)
+    globeInstance
+      .arcsData(arcs)
+      .arcStartLat('startLat').arcStartLng('startLng')
+      .arcEndLat('endLat').arcEndLng('endLng')
+      .arcColor('color')
+      .arcStroke('stroke')
+      .arcDashLength(0.4)
+      .arcDashGap(0.2)
+      .arcDashAnimateTime(2000)
+      .arcAltitudeAutoScale(0.35)
+  }
 
-  // Resize observer
-  roObserver = new ResizeObserver(() => {
-    if (containerRef.value && globeInstance) {
-      globeInstance.width(containerRef.value.clientWidth)
-      globeInstance.height(containerRef.value.clientHeight)
-    }
+  // Rings
+  if (showRings.value) {
+    const rings = buildRings(store.filteredEvents)
+    globeInstance
+      .ringsData(rings)
+      .ringLat('lat').ringLng('lng')
+      .ringMaxRadius('maxR')
+      .ringPropagationSpeed('propagationSpeed')
+      .ringRepeatPeriod('repeatPeriod')
+      .ringColor(d => t => {
+        const c = d.color
+        const alpha = Math.max(0, 0.8 * (1 - t))
+        return c.replace('#', '') === c.replace('#', '') ? hexToRgba(c, alpha) : c
+      })
+  }
+
+  // Auto-rotate
+  startRotation()
+
+  // Track mouse for tooltip
+  globeEl.value.addEventListener('mousemove', e => {
+    tooltipPos.x = e.offsetX + 14
+    tooltipPos.y = e.offsetY + 14
   })
-  roObserver.observe(containerRef.value)
+}
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r},${g},${b},${alpha})`
+}
+
+function startRotation() {
+  if (!globeInstance) return
+  globeInstance.controls().autoRotate = true
+  globeInstance.controls().autoRotateSpeed = 0.4
+}
+
+function stopRotation() {
+  if (!globeInstance) return
+  globeInstance.controls().autoRotate = false
+}
+
+function toggleRotation() {
+  rotating.value = !rotating.value
+  rotating.value ? startRotation() : stopRotation()
+}
+
+function resetCamera() {
+  if (!globeInstance) return
+  globeInstance.pointOfView({ lat: 20, lng: 10, altitude: 2.5 }, 800)
+}
+
+function zoomIn() {
+  if (!globeInstance) return
+  const pov = globeInstance.pointOfView()
+  globeInstance.pointOfView({ ...pov, altitude: Math.max(0.5, pov.altitude * 0.7) }, 300)
+}
+
+function zoomOut() {
+  if (!globeInstance) return
+  const pov = globeInstance.pointOfView()
+  globeInstance.pointOfView({ ...pov, altitude: Math.min(5, pov.altitude * 1.4) }, 300)
+}
+
+function toggleHeatRings() {
+  showRings.value = !showRings.value
+  if (!globeInstance) return
+  if (showRings.value) {
+    globeInstance.ringsData(buildRings(store.filteredEvents))
+  } else {
+    globeInstance.ringsData([])
+  }
+}
+
+function toggleArcs() {
+  showArcs.value = !showArcs.value
+  if (!globeInstance) return
+  if (showArcs.value) {
+    globeInstance.arcsData(buildArcs(store.filteredEvents))
+  } else {
+    globeInstance.arcsData([])
+  }
+}
+
+function updateGlobe() {
+  if (!globeInstance) return
+  const evts = store.filteredEvents
+  globeInstance.pointsData(evts)
+  if (showArcs.value)  globeInstance.arcsData(buildArcs(evts))
+  if (showRings.value) globeInstance.ringsData(buildRings(evts))
+}
+
+function resizeGlobe() {
+  if (!globeInstance || !globeEl.value) return
+  globeInstance
+    .width(globeEl.value.clientWidth)
+    .height(globeEl.value.clientHeight)
+}
+
+onMounted(async () => {
+  await nextTick()
+  await initGlobe()
+
+  roObserver = new ResizeObserver(() => resizeGlobe())
+  if (containerRef.value) roObserver.observe(containerRef.value)
 })
 
 onUnmounted(() => {
-  roObserver?.disconnect()
-  globeInstance?._destructor?.()
+  if (roObserver) roObserver.disconnect()
+  if (globeInstance) {
+    try { globeInstance._destructor?.() } catch {}
+    globeInstance = null
+  }
 })
 
-// Reactively update globe when filtered data changes
-watch(() => store.filteredEvents, (evts) => {
-  if (!globeInstance) return
-  globeInstance
-    .pointsData(evts)
-    .arcsData(showArcs.value ? buildArcs(evts) : [])
-    .ringsData(showRings.value ? evts.filter(e => e.severity === 'critical') : [])
-}, { deep: false })
-
-watch(showArcs, (v) => {
-  globeInstance?.arcsData(v ? buildArcs(store.filteredEvents) : [])
-})
-watch(showRings, (v) => {
-  globeInstance?.ringsData(v ? store.filteredEvents.filter(e => e.severity === 'critical') : [])
-})
-
-function resetCamera() {
-  globeInstance?.pointOfView({ lat: 20, lng: 10, altitude: 2.2 }, 800)
-}
-function toggleRotation() {
-  rotating.value = !rotating.value
-  if (globeInstance) globeInstance.controls().autoRotate = rotating.value
-}
-function zoomIn()  { globeInstance?.pointOfView({ altitude: Math.max(0.5, (globeInstance.pointOfView().altitude || 2) * 0.7) }, 400) }
-function zoomOut() { globeInstance?.pointOfView({ altitude: Math.min(5,   (globeInstance.pointOfView().altitude || 2) * 1.4) }, 400) }
-function toggleHeatRings() { showRings.value = !showRings.value }
-function toggleArcs()      { showArcs.value  = !showArcs.value  }
+watch(() => store.filteredEvents, updateGlobe, { deep: false })
 </script>
 
 <style scoped>
@@ -223,11 +320,15 @@ function toggleArcs()      { showArcs.value  = !showArcs.value  }
   position: relative;
   width: 100%;
   height: 100%;
-  background: #0a0e1a;
+  background: radial-gradient(ellipse at center, #0a1628 0%, #020408 100%);
   overflow: hidden;
 }
-.globe-el { width: 100%; height: 100%; }
+.globe-el {
+  width: 100%;
+  height: 100%;
+}
 
+/* Controls */
 .globe-controls {
   position: absolute;
   top: 12px;
@@ -240,7 +341,7 @@ function toggleArcs()      { showArcs.value  = !showArcs.value  }
 .ctrl-btn {
   width: 28px;
   height: 28px;
-  background: rgba(13,20,36,0.85);
+  background: rgba(13, 20, 36, 0.85);
   border: 1px solid #1e2d45;
   border-radius: 4px;
   color: #64748b;
@@ -253,13 +354,17 @@ function toggleArcs()      { showArcs.value  = !showArcs.value  }
   backdrop-filter: blur(4px);
 }
 .ctrl-btn:hover { color: #94a3b8; border-color: #3b82f6; }
-.ctrl-btn.active { color: #3b82f6; border-color: rgba(59,130,246,0.5); background: rgba(59,130,246,0.1); }
+.ctrl-btn.active { color: #3b82f6; border-color: #3b82f6; background: rgba(59,130,246,0.12); }
 
+/* Legend */
 .globe-legend {
   position: absolute;
-  bottom: 12px;
+  bottom: 48px;
   left: 12px;
-  background: rgba(13,20,36,0.85);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(13, 20, 36, 0.82);
   border: 1px solid #1e2d45;
   border-radius: 6px;
   padding: 8px 10px;
@@ -272,57 +377,58 @@ function toggleArcs()      { showArcs.value  = !showArcs.value  }
   gap: 6px;
   font-size: 10px;
   color: #94a3b8;
-  margin-bottom: 4px;
 }
-.legend-item:last-child { margin-bottom: 0; }
 .legend-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 .legend-count {
   margin-left: auto;
-  padding-left: 8px;
   color: #475569;
   font-family: 'JetBrains Mono', monospace;
   font-size: 9px;
 }
 
+/* Tooltip */
 .globe-tooltip {
   position: absolute;
-  background: rgba(13,20,36,0.95);
+  pointer-events: none;
+  background: rgba(13, 20, 36, 0.95);
   border: 1px solid #1e2d45;
   border-radius: 6px;
   padding: 8px 12px;
-  pointer-events: none;
   z-index: 20;
-  max-width: 240px;
-  backdrop-filter: blur(4px);
+  max-width: 220px;
 }
-.tt-type    { font-size: 12px; font-weight: 600; color: #e2e8f0; margin-bottom: 3px; }
-.tt-country { font-size: 10px; color: #64748b; margin-bottom: 2px; }
-.tt-fatal   { font-size: 10px; color: #ef4444; margin-bottom: 2px; }
-.tt-actors  { font-size: 10px; color: #94a3b8; margin-bottom: 2px; }
-.tt-source  { font-size: 9px;  color: #475569; }
+.tt-type    { font-size: 11px; font-weight: 700; color: #e2e8f0; margin-bottom: 3px; }
+.tt-country { font-size: 10px; color: #94a3b8; }
+.tt-fatal   { font-size: 10px; color: #ef4444; margin-top: 3px; }
+.tt-actors  { font-size: 9px;  color: #64748b; margin-top: 2px; }
+.tt-source  { font-size: 9px;  color: #334155; margin-top: 4px; }
 
+/* Stats */
 .globe-stats {
   position: absolute;
-  top: 12px;
-  left: 12px;
-  background: rgba(13,20,36,0.85);
-  border: 1px solid #1e2d45;
-  border-radius: 6px;
-  padding: 6px 10px;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 10px;
+  gap: 10px;
+  background: rgba(13, 20, 36, 0.82);
+  border: 1px solid #1e2d45;
+  border-radius: 20px;
+  padding: 5px 16px;
   backdrop-filter: blur(4px);
   z-index: 10;
 }
-.gs-item { display: flex; align-items: baseline; gap: 3px; }
-.gs-val  { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; }
-.gs-lbl  { color: #475569; font-size: 9px; }
-.gs-sep  { color: #1e2d45; }
+.gs-item { display: flex; align-items: center; gap: 5px; }
+.gs-val  { font-size: 12px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.gs-lbl  { font-size: 9px; color: #475569; text-transform: uppercase; }
+.gs-sep  { color: #1e2d45; font-size: 14px; }
+.text-blue-400  { color: #60a5fa; }
+.text-red-400   { color: #f87171; }
+.text-amber-400 { color: #fbbf24; }
 </style>

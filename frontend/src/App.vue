@@ -1,22 +1,7 @@
 <template>
-  <div class="app-shell">
-    <router-view />
-  </div>
+  <RouterView />
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
-import { useConflictsStore } from '@/stores/conflicts'
-
-const store = useConflictsStore()
-onMounted(() => store.loadAllData())
+import { RouterView } from 'vue-router'
 </script>
-
-<style>
-.app-shell {
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
-  background: #0a0e1a;
-}
-</style>
