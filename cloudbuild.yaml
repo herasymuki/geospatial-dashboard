@@ -3,13 +3,13 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/global-conflicts-athena-service:$COMMIT_SHA'
+      - 'gcr.io/$PROJECT_ID/global-conflicts-athena-service:latest'
       - '.'
 
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'gcr.io/$PROJECT_ID/global-conflicts-athena-service:$COMMIT_SHA'
+      - 'gcr.io/$PROJECT_ID/global-conflicts-athena-service:latest'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
@@ -17,14 +17,16 @@ steps:
       - 'run'
       - 'deploy'
       - 'global-conflicts-athena-service'
-      - '--image=gcr.io/$PROJECT_ID/global-conflicts-athena-service:$COMMIT_SHA'
+      - '--image=gcr.io/$PROJECT_ID/global-conflicts-athena-service:latest'
       - '--region=us-central1'
       - '--project=s4d-athena-hosting'
       - '--allow-unauthenticated'
-      - '--memory=1Gi'
-      - '--cpu=1'
+      - '--memory=2Gi'
+      - '--cpu=2'
+      - '--timeout=300'
+      - '--concurrency=80'
       - '--min-instances=0'
       - '--max-instances=5'
 
 images:
-  - 'gcr.io/$PROJECT_ID/global-conflicts-athena-service:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/global-conflicts-athena-service:latest'
