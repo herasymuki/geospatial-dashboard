@@ -216,8 +216,8 @@ onMounted(async () => {
 
   // ── Deck.gl ───────────────────────────────────────────────────────────────
   const { Deck }          = await import('@deck.gl/core')
-  const { HeatmapLayer, ScatterplotLayer, ArcLayer } = await import('@deck.gl/layers')
-  const { HexagonLayer }  = await import('@deck.gl/aggregation-layers')
+  const { ScatterplotLayer, ArcLayer } = await import('@deck.gl/layers')
+  const { HeatmapLayer, HexagonLayer } = await import('@deck.gl/aggregation-layers')
 
   LayerClasses = { HeatmapLayer, ScatterplotLayer, ArcLayer, HexagonLayer }
 

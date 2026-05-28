@@ -15,9 +15,6 @@ export default defineConfig({
       }
     }
   },
-  optimizeDeps: {
-    exclude: ['globe.gl', 'deck.gl', '@deck.gl/core', '@deck.gl/layers', '@deck.gl/aggregation-layers'],
-  },
   build: {
     outDir:    'dist',
     sourcemap: false,

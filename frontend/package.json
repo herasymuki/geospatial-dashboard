@@ -12,12 +12,12 @@
     "pinia": "^2.1.7",
     "vue-router": "^4.3.0",
     "globe.gl": "^2.27.0",
-    "deck.gl": "^9.0.0",
-    "@deck.gl/core": "^9.0.0",
-    "@deck.gl/layers": "^9.0.0",
-    "@deck.gl/aggregation-layers": "^9.0.0",
-    "@deck.gl/geo-layers": "^9.0.0",
-    "luma.gl": "^9.0.0",
+    "deck.gl": "^8.9.0",
+    "@deck.gl/core": "^8.9.0",
+    "@deck.gl/layers": "^8.9.0",
+    "@deck.gl/aggregation-layers": "^8.9.0",
+    "@deck.gl/geo-layers": "^8.9.0",
+    "luma.gl": "^8.5.0",
     "chart.js": "^4.4.0",
     "vue-chartjs": "^5.3.0",
     "leaflet": "^1.9.4",
@@ -25,8 +25,7 @@
     "dayjs": "^1.11.10",
     "marked": "^11.0.0",
     "@vueuse/core": "^10.7.0",
-    "three": "^0.160.0",
-    "@luma.gl/core": "^9.0.0"
+    "three": "^0.160.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",
