@@ -15,16 +15,21 @@ export default defineConfig({
       }
     }
   },
+  optimizeDeps: {
+    exclude: ['globe.gl', 'deck.gl', '@deck.gl/core', '@deck.gl/layers', '@deck.gl/aggregation-layers'],
+  },
   build: {
-    outDir: 'dist',
+    outDir:    'dist',
     sourcemap: false,
+    target:    'esnext',
     rollupOptions: {
       output: {
         manualChunks: {
-          'deck': ['deck.gl', '@deck.gl/core', '@deck.gl/layers', '@deck.gl/aggregation-layers'],
-          'globe': ['globe.gl'],
-          'charts': ['chart.js', 'vue-chartjs'],
-          'vendor': ['vue', 'pinia', 'vue-router', 'axios', 'dayjs']
+          'deck':    ['@deck.gl/core', '@deck.gl/layers', '@deck.gl/aggregation-layers'],
+          'globe':   ['globe.gl'],
+          'charts':  ['chart.js', 'vue-chartjs'],
+          'leaflet': ['leaflet'],
+          'vendor':  ['vue', 'pinia', 'vue-router', 'axios', 'dayjs', 'marked'],
         }
       }
     }

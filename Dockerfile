@@ -13,22 +13,18 @@ FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-# System deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-# Python deps
 COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Backend source
 COPY backend/ ./
 
 # Vue build output → static/
 COPY --from=frontend-builder /app/frontend/dist ./static
 
-# Cloud Run uses PORT env var
 ENV PORT=8080
 EXPOSE 8080
 

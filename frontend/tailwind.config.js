@@ -1,24 +1,23 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{vue,js,ts}'],
+  content: [
+    './index.html',
+    './src/**/*.{vue,js,ts,jsx,tsx}',
+  ],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        'dark-bg':    '#0a0e1a',
-        'dark-panel': '#111827',
-        'dark-card':  '#1a2235',
-        'dark-border':'#1e2d45',
-        'accent-red': '#ef4444',
-        'accent-amber':'#f59e0b',
-        'accent-blue': '#3b82f6',
-        'accent-cyan': '#06b6d4',
-        'accent-green':'#10b981',
+        'dark-bg':      '#0a0e1a',
+        'dark-surface': '#0d1424',
+        'dark-card':    '#111827',
+        'dark-border':  '#1e2d45',
       },
       fontFamily: {
-        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
-        sans: ['Inter', 'system-ui', 'sans-serif']
-      }
-    }
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
+      },
+    },
   },
-  plugins: []
+  plugins: [],
 }

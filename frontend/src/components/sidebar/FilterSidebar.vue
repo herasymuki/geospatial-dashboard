@@ -5,36 +5,60 @@
     <!-- Date Range -->
     <div class="filter-section">
       <div class="filter-label">DATE RANGE</div>
-      <input type="date" v-model="filters.dateFrom" class="date-input" @change="apply" />
-      <input type="date" v-model="filters.dateTo"   class="date-input" @change="apply" />
+      <input type="date" v-model="filters.dateFrom" class="date-input" />
+      <input type="date" v-model="filters.dateTo"   class="date-input" />
     </div>
 
     <!-- Min Fatalities -->
     <div class="filter-section">
-      <div class="filter-label">MIN FATALITIES: <span class="filter-val">{{ filters.minFatalities }}</span></div>
-      <input type="range" min="0" max="500" step="5"
-        v-model.number="filters.minFatalities" @input="apply" class="range-input" />
+      <div class="filter-label">
+        MIN FATALITIES
+        <span class="filter-val">{{ filters.minFatalities }}</span>
+      </div>
+      <input
+        type="range" min="0" max="500" step="5"
+        v-model.number="filters.minFatalities"
+        class="range-input"
+      />
+      <div class="range-labels">
+        <span>0</span><span>100</span><span>200</span><span>300</span><span>500+</span>
+      </div>
     </div>
 
     <!-- Data Sources -->
     <div class="filter-section">
       <div class="filter-label">DATA SOURCES</div>
       <label v-for="src in sources" :key="src.id" class="source-toggle">
-        <input type="checkbox" v-model="filters.sources[src.id]" @change="apply" />
+        <input type="checkbox" v-model="filters.sources[src.id]" />
         <span class="toggle-dot" :style="{ background: src.color }"></span>
         <span class="toggle-label">{{ src.label }}</span>
         <span class="toggle-count">{{ sourceCounts[src.id] }}</span>
       </label>
     </div>
 
+    <!-- Severity -->
+    <div class="filter-section">
+      <div class="filter-label">SEVERITY</div>
+      <label v-for="sev in severities" :key="sev.id" class="source-toggle">
+        <input type="checkbox" :value="sev.id" v-model="filters.severity" />
+        <span class="toggle-dot" :style="{ background: sev.color }"></span>
+        <span class="toggle-label">{{ sev.label }}</span>
+        <span class="toggle-count">{{ severityCounts[sev.id] }}</span>
+      </label>
+    </div>
+
     <!-- Event Types -->
     <div class="filter-section">
-      <div class="filter-label">EVENT TYPES</div>
+      <div class="filter-label">
+        EVENT TYPES
+        <button v-if="filters.eventTypes.length" class="clear-btn" @click="filters.eventTypes = []">
+          Clear
+        </button>
+      </div>
       <label v-for="et in eventTypes" :key="et" class="type-toggle">
-        <input type="checkbox" :value="et" v-model="filters.eventTypes" @change="apply" />
+        <input type="checkbox" :value="et" v-model="filters.eventTypes" />
         <span>{{ et }}</span>
       </label>
-      <button v-if="filters.eventTypes.length" class="clear-btn" @click="clearTypes">Clear</button>
     </div>
 
     <!-- Stats summary -->
@@ -53,17 +77,32 @@
         <span class="stat-num text-amber-400">{{ store.stats.countries }}</span>
       </div>
       <div class="stat-row">
-        <span class="stat-key">High Severity</span>
-        <span class="stat-num text-red-500">{{ store.stats.highSeverity }}</span>
+        <span class="stat-key">Critical</span>
+        <span class="stat-num" style="color:#ef4444">{{ store.stats.bySeverity.critical }}</span>
       </div>
+      <div class="stat-row">
+        <span class="stat-key">High</span>
+        <span class="stat-num" style="color:#f59e0b">{{ store.stats.bySeverity.high }}</span>
+      </div>
+    </div>
+
+    <!-- Last updated -->
+    <div v-if="store.lastUpdated" class="filter-section">
+      <div class="filter-label">LAST UPDATED</div>
+      <div class="last-updated">{{ formatDate(store.lastUpdated) }}</div>
     </div>
 
     <!-- Refresh -->
     <div class="filter-section">
       <button class="refresh-btn" @click="store.loadAllData()" :disabled="store.loading">
-        <span>{{ store.loading ? '⟳' : '↻' }}</span>
+        <span :class="{ spinning: store.loading }">↻</span>
         {{ store.loading ? 'Loading…' : 'Refresh Data' }}
       </button>
+    </div>
+
+    <!-- Error -->
+    <div v-if="store.error" class="filter-section error-section">
+      ⚠ {{ store.error }}
     </div>
   </div>
 </template>
@@ -71,21 +110,33 @@
 <script setup>
 import { computed } from 'vue'
 import { useConflictsStore } from '@/stores/conflicts'
+import dayjs from 'dayjs'
 
 const store   = useConflictsStore()
 const filters = store.filters
 
 const sources = [
-  { id: 'acled',      label: 'ACLED',      color: '#ef4444' },
-  { id: 'ucdp',       label: 'UCDP',       color: '#f59e0b' },
-  { id: 'gdelt',      label: 'GDELT',      color: '#06b6d4' },
-  { id: 'reliefweb',  label: 'ReliefWeb',  color: '#10b981' },
+  { id: 'acled',     label: 'ACLED',     color: '#ef4444' },
+  { id: 'ucdp',      label: 'UCDP',      color: '#f59e0b' },
+  { id: 'gdelt',     label: 'GDELT',     color: '#06b6d4' },
+  { id: 'reliefweb', label: 'ReliefWeb', color: '#10b981' },
+]
+
+const severities = [
+  { id: 'critical', label: 'Critical (100+ fatalities)', color: '#ef4444' },
+  { id: 'high',     label: 'High (20–99)',               color: '#f59e0b' },
+  { id: 'medium',   label: 'Medium (5–19)',              color: '#3b82f6' },
+  { id: 'low',      label: 'Low (0–4)',                  color: '#10b981' },
 ]
 
 const eventTypes = [
-  'Battles', 'Violence against civilians',
-  'Explosions/Remote violence', 'Protests', 'Riots',
-  'Strategic developments', 'Armed Conflict'
+  'Battles',
+  'Violence against civilians',
+  'Explosions/Remote violence',
+  'Protests',
+  'Riots',
+  'Strategic developments',
+  'Armed Conflict',
 ]
 
 const sourceCounts = computed(() => {
@@ -97,8 +148,17 @@ const sourceCounts = computed(() => {
   return counts
 })
 
-function apply()      { /* reactive — filters are already reactive in store */ }
-function clearTypes() { filters.eventTypes = [] }
+const severityCounts = computed(() => {
+  const counts = { critical: 0, high: 0, medium: 0, low: 0 }
+  store.filteredEvents.forEach(e => {
+    if (counts[e.severity] !== undefined) counts[e.severity]++
+  })
+  return counts
+})
+
+function formatDate(iso) {
+  return dayjs(iso).format('MMM D, YYYY HH:mm')
+}
 </script>
 
 <style scoped>
@@ -106,6 +166,7 @@ function clearTypes() { filters.eventTypes = [] }
   background: #0d1424;
   height: 100%;
   overflow-y: auto;
+  border-right: 1px solid #1e2d45;
 }
 .filter-section {
   padding: 10px 12px;
@@ -117,10 +178,16 @@ function clearTypes() { filters.eventTypes = [] }
   letter-spacing: 0.1em;
   color: #475569;
   text-transform: uppercase;
-  margin-bottom: 8px;
+  margin-bottom: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
-.filter-val { color: #3b82f6; }
-
+.filter-val {
+  font-family: 'JetBrains Mono', monospace;
+  color: #3b82f6;
+  font-size: 10px;
+}
 .date-input {
   width: 100%;
   background: #111827;
@@ -128,7 +195,7 @@ function clearTypes() { filters.eventTypes = [] }
   border-radius: 4px;
   color: #94a3b8;
   font-size: 11px;
-  padding: 4px 8px;
+  padding: 5px 8px;
   margin-bottom: 4px;
   outline: none;
 }
@@ -139,51 +206,85 @@ function clearTypes() { filters.eventTypes = [] }
   accent-color: #3b82f6;
   cursor: pointer;
 }
+.range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+  color: #475569;
+  margin-top: 2px;
+}
 
 .source-toggle, .type-toggle {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 11px;
-  color: #94a3b8;
   margin-bottom: 5px;
   cursor: pointer;
+  font-size: 11px;
+  color: #94a3b8;
 }
-.source-toggle input, .type-toggle input { accent-color: #3b82f6; cursor: pointer; }
-.toggle-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.source-toggle input, .type-toggle input {
+  accent-color: #3b82f6;
+  cursor: pointer;
+}
+.toggle-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
 .toggle-label { flex: 1; }
-.toggle-count { font-size: 10px; color: #475569; font-family: 'JetBrains Mono', monospace; }
+.toggle-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: #475569;
+}
 
 .clear-btn {
-  font-size: 10px;
+  font-size: 9px;
   color: #ef4444;
-  background: none;
+  background: transparent;
   border: none;
   cursor: pointer;
   padding: 0;
-  margin-top: 2px;
 }
 
-.stats-summary { background: #0a0e1a; }
-.stat-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
-.stat-key { font-size: 10px; color: #475569; }
-.stat-num { font-size: 12px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.stats-summary {}
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.stat-key { font-size: 10px; color: #64748b; }
+.stat-num { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; }
+
+.last-updated { font-size: 10px; color: #475569; font-family: 'JetBrains Mono', monospace; }
 
 .refresh-btn {
   width: 100%;
-  padding: 7px;
+  padding: 7px 12px;
   background: rgba(59,130,246,0.08);
-  border: 1px solid rgba(59,130,246,0.2);
+  border: 1px solid rgba(59,130,246,0.25);
   border-radius: 5px;
   color: #3b82f6;
   font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
+  transition: all 0.15s;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  transition: all 0.15s;
 }
 .refresh-btn:hover:not(:disabled) { background: rgba(59,130,246,0.15); }
-.refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.refresh-btn:disabled { opacity: 0.5; cursor: default; }
+
+.spinning {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.error-section { font-size: 10px; color: #ef4444; }
 </style>

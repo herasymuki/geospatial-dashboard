@@ -25,7 +25,8 @@
     "dayjs": "^1.11.10",
     "marked": "^11.0.0",
     "@vueuse/core": "^10.7.0",
-    "three": "^0.160.0"
+    "three": "^0.160.0",
+    "@luma.gl/core": "^9.0.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",

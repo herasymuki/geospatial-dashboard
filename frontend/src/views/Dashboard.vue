@@ -1,6 +1,6 @@
 <template>
   <div class="dashboard">
-    <!-- ── Top Bar ──────────────────────────────────────────────────── -->
+    <!-- ── Top Bar ─────────────────────────────────────────────────────────── -->
     <header class="topbar">
       <div class="topbar-left">
         <div class="logo">
@@ -24,29 +24,33 @@
       </div>
     </header>
 
-    <!-- ── Main Layout ──────────────────────────────────────────────── -->
+    <!-- ── Main Layout ─────────────────────────────────────────────────────── -->
     <div class="main-layout">
-      <!-- Sidebar -->
+      <!-- Left sidebar — filters -->
       <FilterSidebar class="sidebar-col" />
 
-      <!-- Centre — Globe / Deck / Split -->
+      <!-- Centre — map views + timeline -->
       <div class="centre-col">
-        <div v-if="store.activeView === 'globe'" class="view-full">
-          <GlobeView />
+        <div class="map-area">
+          <Transition name="view-fade" mode="out-in">
+            <div v-if="store.activeView === 'globe'" key="globe" class="view-full">
+              <GlobeView />
+            </div>
+            <div v-else-if="store.activeView === 'deck'" key="deck" class="view-full">
+              <DeckMapView />
+            </div>
+            <div v-else-if="store.activeView === 'split'" key="split" class="view-split">
+              <GlobeView   class="split-half" />
+              <DeckMapView class="split-half" />
+            </div>
+          </Transition>
         </div>
-        <div v-else-if="store.activeView === 'deck'" class="view-full">
-          <DeckMapView />
+        <div class="timeline-area">
+          <TimelinePanel />
         </div>
-        <div v-else-if="store.activeView === 'split'" class="view-split">
-          <GlobeView class="split-half" />
-          <DeckMapView class="split-half" />
-        </div>
-
-        <!-- Timeline always visible below map -->
-        <TimelinePanel class="timeline-strip" />
       </div>
 
-      <!-- Right Panel — Drill-down + AI -->
+      <!-- Right panel — drill-down + AI -->
       <div class="right-col">
         <DrillDownPanel />
         <AIPanel />
@@ -75,9 +79,9 @@ import AIPanel        from '@/components/ui/AIPanel.vue'
 
 const store = useConflictsStore()
 const views = [
-  { id: 'globe', label: '🌍 Globe' },
+  { id: 'globe', label: '🌍 Globe'    },
   { id: 'deck',  label: '🗺 Deck Map' },
-  { id: 'split', label: '⊞ Split' }
+  { id: 'split', label: '⊞ Split'    },
 ]
 </script>
 
@@ -102,14 +106,9 @@ const views = [
   justify-content: space-between;
   padding: 0 16px;
   z-index: 100;
+  flex-shrink: 0;
 }
-
-.topbar-left, .topbar-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
+.topbar-left, .topbar-right { display: flex; align-items: center; gap: 16px; }
 .logo { display: flex; align-items: center; gap: 8px; }
 .logo-icon { font-size: 18px; }
 .logo-text {
@@ -125,7 +124,6 @@ const views = [
   margin-left: 6px;
   letter-spacing: 0.15em;
 }
-
 .view-tabs { display: flex; gap: 4px; }
 .view-tab {
   padding: 4px 12px;
@@ -138,7 +136,7 @@ const views = [
   cursor: pointer;
   transition: all 0.15s;
 }
-.view-tab:hover { color: #94a3b8; border-color: #1e2d45; }
+.view-tab:hover  { color: #94a3b8; border-color: #1e2d45; }
 .view-tab.active { color: #3b82f6; background: rgba(59,130,246,0.1); border-color: rgba(59,130,246,0.3); }
 
 .live-badge {
@@ -151,78 +149,105 @@ const views = [
   color: #10b981;
 }
 .pulse {
-  width: 7px; height: 7px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: #10b981;
-  animation: pulse 1.5s infinite;
+  animation: pulse-anim 2s infinite;
 }
-@keyframes pulse {
+@keyframes pulse-anim {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.5; transform: scale(1.4); }
+  50%       { opacity: 0.5; transform: scale(1.3); }
 }
 
 /* ── Main Layout ── */
 .main-layout {
   flex: 1;
   display: grid;
-  grid-template-columns: 220px 1fr 300px;
+  grid-template-columns: 200px 1fr 280px;
+  grid-template-rows: 1fr;
+  min-height: 0;
   overflow: hidden;
 }
 
-.sidebar-col { overflow-y: auto; border-right: 1px solid #1e2d45; }
+.sidebar-col {
+  grid-column: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
 
 .centre-col {
+  grid-column: 2;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   overflow: hidden;
+  border-left: 1px solid #1e2d45;
+  border-right: 1px solid #1e2d45;
 }
 
-.view-full { flex: 1; min-height: 0; }
-
-.view-split {
+.map-area {
   flex: 1;
   min-height: 0;
+  position: relative;
+}
+
+.view-full {
+  width: 100%;
+  height: 100%;
+}
+
+.view-split {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  width: 100%;
+  height: 100%;
 }
-.split-half { min-height: 0; }
+.split-half { min-width: 0; min-height: 0; }
 
-.timeline-strip {
-  height: 160px;
-  min-height: 160px;
+.timeline-area {
+  height: 140px;
+  min-height: 140px;
+  flex-shrink: 0;
   border-top: 1px solid #1e2d45;
 }
 
 .right-col {
+  grid-column: 3;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid #1e2d45;
+  min-height: 0;
   overflow: hidden;
 }
 
-/* ── Loading ── */
+/* ── Loading overlay ── */
 .loading-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(10,14,26,0.85);
+  background: rgba(10,14,26,0.8);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
   gap: 16px;
-  font-size: 13px;
-  color: #64748b;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
 }
 .loading-spinner {
-  width: 40px; height: 40px;
-  border: 3px solid #1e2d45;
+  width: 36px;
+  height: 36px;
+  border: 2px solid #1e2d45;
   border-top-color: #3b82f6;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
+.loading-overlay p { font-size: 12px; color: #64748b; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── Transitions ── */
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+.view-fade-enter-active, .view-fade-leave-active { transition: opacity 0.2s; }
+.view-fade-enter-from, .view-fade-leave-to { opacity: 0; }
 </style>
