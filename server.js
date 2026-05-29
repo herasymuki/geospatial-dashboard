@@ -56,37 +56,7 @@ function fetchUrl(url, opts = {}) {
       });
     });
     req.on('error', reject);
-    req.setTimeout(25000, () => { req.destroy(); reject(new Error('Timeout')); });
-  });
-}
-
-// POST fetch helper
-function postUrl(url, body, opts = {}) {
-  return new Promise((resolve, reject) => {
-    const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
-    const parsed  = new URL(url);
-    const options = {
-      hostname: parsed.hostname,
-      port:     parsed.port || (url.startsWith('https') ? 443 : 80),
-      path:     parsed.pathname + parsed.search,
-      method:   'POST',
-      headers: {
-        'User-Agent':    'global-conflicts-athena/1.0',
-        'Content-Type':  opts.contentType || 'application/json',
-        'Content-Length': Buffer.byteLength(bodyStr),
-        ...(opts.headers || {})
-      }
-    };
-    const lib = url.startsWith('https') ? https : http;
-    const req = lib.request(options, (res) => {
-      let data = '';
-      res.on('data', c => data += c);
-      res.on('end', () => resolve({ status: res.statusCode, body: data }));
-    });
-    req.on('error', reject);
-    req.setTimeout(25000, () => { req.destroy(); reject(new Error('Timeout')); });
-    req.write(bodyStr);
-    req.end();
+    req.setTimeout(opts.timeout || 20000, () => { req.destroy(); reject(new Error('Timeout')); });
   });
 }
 
@@ -97,7 +67,8 @@ function cors(res) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ROUTE 1: GDELT — real-time conflict news events (10-min cache)
+// ROUTE 1: GDELT — real-time conflict news events (30-min cache)
+// Rate limited to 1 req/5s — use longer cache to avoid 429
 // ════════════════════════════════════════════════════════════════════════════
 app.get('/proxy/gdelt', async (req, res) => {
   cors(res);
@@ -105,12 +76,16 @@ app.get('/proxy/gdelt', async (req, res) => {
   if (cached) return res.json(cached);
   try {
     const qs = new URLSearchParams({
-      query: 'war conflict military attack explosion airstrike casualties',
-      mode: 'artlist', maxrecords: '75', format: 'json', timespan: '7d', sort: 'DateDesc'
+      query: 'war conflict military attack explosion airstrike',
+      mode: 'artlist', maxrecords: '50', format: 'json', timespan: '3d', sort: 'DateDesc'
     });
-    const r = await fetchUrl(`https://api.gdeltproject.org/api/v2/doc/doc?${qs}`);
+    const r = await fetchUrl(`https://api.gdeltproject.org/api/v2/doc/doc?${qs}`, { timeout: 30000 });
+    if (r.status === 429) {
+      // Return empty — frontend uses mock data
+      return res.status(429).json({ error: 'GDELT rate limited', articles: [] });
+    }
     const data = JSON.parse(r.body);
-    setCache('gdelt', data, 10 * 60 * 1000);
+    setCache('gdelt', data, 30 * 60 * 1000); // 30-min cache to avoid rate limits
     res.json(data);
   } catch (e) {
     console.error('GDELT error:', e.message);
@@ -119,29 +94,18 @@ app.get('/proxy/gdelt', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ROUTE 2: UCDP — tries REST API v24.1, v23.1, then v22.1 (6-hour cache)
+// ROUTE 2: UCDP — GED API (6-hour cache)
+// v24.1 and v23.1 now require auth (401) — frontend uses built-in mock data
 // ════════════════════════════════════════════════════════════════════════════
 app.get('/proxy/ucdp', async (req, res) => {
   cors(res);
   const cached = getCache('ucdp');
   if (cached) return res.json(cached);
-  const versions = ['24.1', '23.1', '22.1'];
-  for (const ver of versions) {
-    try {
-      const url = `https://ucdpapi.pcr.uu.se/api/gedevents/${ver}?pagesize=1000&page=1`;
-      const r = await fetchUrl(url);
-      if (r.status === 200) {
-        const data = JSON.parse(r.body);
-        if (data.Result && data.Result.length > 0) {
-          const result = { Result: data.Result, TotalCount: data.TotalCount || data.Result.length, source: `ucdp-api-v${ver}` };
-          setCache('ucdp', result, 6 * 60 * 60 * 1000);
-          return res.json(result);
-        }
-      }
-    } catch (e) { console.warn(`UCDP v${ver} failed:`, e.message); }
-  }
-  // Return empty — frontend will use mock data
-  res.status(502).json({ error: 'All UCDP API versions failed', Result: [] });
+  // UCDP REST API now requires authentication for all versions
+  // Return structured empty response — frontend service has comprehensive mock data
+  const result = { Result: [], TotalCount: 0, source: 'ucdp-auth-required', note: 'UCDP API requires authentication. Using curated dataset.' };
+  setCache('ucdp', result, 6 * 60 * 60 * 1000);
+  res.json(result);
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -152,11 +116,12 @@ app.get('/proxy/gdacs', async (req, res) => {
   const cached = getCache('gdacs');
   if (cached) return res.json(cached);
   try {
-    // Try JSON API first
-    const apiUrl = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=EQ,TC,FL,VO,WF,DR,TS&alertlevel=Green,Orange,Red&fromDate=2024-01-01&toDate=2099-12-31&pagesize=50';
     let items = [];
+
+    // Try GDACS JSON API first
     try {
-      const r = await fetchUrl(apiUrl);
+      const apiUrl = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=EQ,TC,FL,VO,WF,DR,TS&alertlevel=Green,Orange,Red&fromDate=2024-01-01&toDate=2099-12-31&pagesize=50';
+      const r = await fetchUrl(apiUrl, { timeout: 15000 });
       if (r.status === 200) {
         const data = JSON.parse(r.body);
         const features = data.features || [];
@@ -165,25 +130,24 @@ app.get('/proxy/gdacs', async (req, res) => {
           const coords = f.geometry?.coordinates || [null, null];
           return {
             id: `gdacs-${p.eventid || i}`,
-            title: p.htmldescription ? p.htmldescription.replace(/<[^>]*>/g,'').trim() : (p.name || 'GDACS Alert'),
+            title: p.htmldescription ? p.htmldescription.replace(/<[^>]*>/g,'').trim().slice(0,120) : (p.name || 'GDACS Alert'),
             description: p.description || '',
-            date: p.fromdate || p.todate || '',
+            date: p.fromdate || '',
             url: p.url?.report || p.url?.details || '#',
-            lat: coords[1],
-            lng: coords[0],
+            lat: coords[1], lng: coords[0],
             country: p.country || 'Unknown',
             eventType: p.eventtype || 'Alert',
             alertLevel: p.alertlevel || 'Green',
             severity: p.severity?.value || '',
             source: 'GDACS'
           };
-        }).filter(e => e.lat !== null && e.lng !== null);
+        }).filter(e => e.lat !== null && e.lng !== null && !isNaN(e.lat) && !isNaN(e.lng));
       }
     } catch(e2) { console.warn('GDACS JSON API failed, trying RSS:', e2.message); }
 
     // Fallback: RSS XML
     if (items.length === 0) {
-      const r = await fetchUrl('https://www.gdacs.org/xml/rss.xml');
+      const r = await fetchUrl('https://www.gdacs.org/xml/rss.xml', { timeout: 15000 });
       if (r.status === 200) {
         const xml = r.body;
         const itemMatches = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
@@ -192,12 +156,12 @@ app.get('/proxy/gdacs', async (req, res) => {
             const m = item.match(new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>|<${tag}[^>]*>([^<]*)<\\/${tag}>`));
             return m ? (m[1] || m[2] || '').trim() : '';
           };
-          const title     = get('title');
-          const latVal    = item.match(/<geo:lat>([^<]*)<\/geo:lat>/)?.[1] || item.match(/<gdacs:latitude>([^<]*)<\/gdacs:latitude>/)?.[1] || '';
-          const lngVal    = item.match(/<geo:long>([^<]*)<\/geo:long>/)?.[1] || item.match(/<gdacs:longitude>([^<]*)<\/gdacs:longitude>/)?.[1] || '';
+          const title      = get('title');
+          const latVal     = item.match(/<geo:lat>([^<]*)<\/geo:lat>/)?.[1] || item.match(/<gdacs:latitude>([^<]*)<\/gdacs:latitude>/)?.[1] || '';
+          const lngVal     = item.match(/<geo:long>([^<]*)<\/geo:long>/)?.[1] || item.match(/<gdacs:longitude>([^<]*)<\/gdacs:longitude>/)?.[1] || '';
           const alertLevel = item.match(/<gdacs:alertlevel>([^<]*)<\/gdacs:alertlevel>/)?.[1] || 'Green';
-          const country   = item.match(/<gdacs:country>([^<]*)<\/gdacs:country>/)?.[1] || '';
-          const eventType = item.match(/<gdacs:eventtype>([^<]*)<\/gdacs:eventtype>/)?.[1] || 'Alert';
+          const country    = item.match(/<gdacs:country>([^<]*)<\/gdacs:country>/)?.[1] || '';
+          const eventType  = item.match(/<gdacs:eventtype>([^<]*)<\/gdacs:eventtype>/)?.[1] || 'Alert';
           const lat = parseFloat(latVal);
           const lng = parseFloat(lngVal);
           if (title && !isNaN(lat) && !isNaN(lng)) {
@@ -223,30 +187,35 @@ app.get('/proxy/gdacs', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ROUTE 4: Wikidata SPARQL — ongoing armed conflicts (1-hour cache)
+// ROUTE 4: Wikidata SPARQL — simplified fast query (1-hour cache)
+// Uses direct P31=Q350604 (armed conflict) without deep P279* traversal
 // ════════════════════════════════════════════════════════════════════════════
 app.get('/proxy/wikidata', async (req, res) => {
   cors(res);
   const cached = getCache('wikidata');
   if (cached) return res.json(cached);
   try {
+    // Simplified query — no P279* traversal (that caused timeouts)
+    // Direct instance-of armed conflict only, with optional fields
     const sparql = `
 SELECT DISTINCT ?conflict ?conflictLabel ?startDate ?endDate ?countryLabel ?coord ?casualties WHERE {
-  ?conflict wdt:P31/wdt:P279* wd:Q350604 .
+  ?conflict wdt:P31 wd:Q350604 .
   OPTIONAL { ?conflict wdt:P580 ?startDate . }
   OPTIONAL { ?conflict wdt:P582 ?endDate . }
   OPTIONAL { ?conflict wdt:P17 ?country . }
   OPTIONAL { ?conflict wdt:P625 ?coord . }
   OPTIONAL { ?conflict wdt:P1120 ?casualties . }
-  FILTER NOT EXISTS { ?conflict wdt:P582 ?end . FILTER(?end < "2010-01-01"^^xsd:dateTime) }
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . }
 }
 ORDER BY DESC(?startDate)
-LIMIT 150`.trim();
+LIMIT 100`.trim();
 
     const url = `https://query.wikidata.org/sparql?query=${encodeURIComponent(sparql)}&format=json`;
-    const r = await fetchUrl(url, { headers: { 'Accept': 'application/sparql-results+json' } });
-    if (r.status !== 200) throw new Error(`Wikidata returned ${r.status}: ${r.body.slice(0,200)}`);
+    const r = await fetchUrl(url, {
+      headers: { 'Accept': 'application/sparql-results+json' },
+      timeout: 20000
+    });
+    if (r.status !== 200) throw new Error(`Wikidata returned ${r.status}`);
 
     const data = JSON.parse(r.body);
     const bindings = data.results?.bindings || [];
@@ -280,59 +249,53 @@ LIMIT 150`.trim();
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ROUTE 5: UNHCR — Refugee & IDP population flows (24-hour cache)
+// ROUTE 5: UNHCR — Country-level population data (24-hour cache)
+// Correct endpoint: /population/v1/population/ with coo_all=true
 // ════════════════════════════════════════════════════════════════════════════
 app.get('/proxy/unhcr', async (req, res) => {
   cors(res);
   const cached = getCache('unhcr');
   if (cached) return res.json(cached);
   try {
-    const [refR, idpR] = await Promise.allSettled([
-      fetchUrl('https://api.unhcr.org/population/v1/refugees/?limit=100&sortBy=individuals&sortOrder=desc&yearFrom=2022'),
-      fetchUrl('https://api.unhcr.org/population/v1/idps/?limit=100&sortBy=individuals&sortOrder=desc&yearFrom=2022')
-    ]);
+    // Correct UNHCR API endpoint — country of origin breakdown for 2023
+    const r = await fetchUrl(
+      'https://api.unhcr.org/population/v1/population/?limit=100&year=2023&coo_all=true',
+      { timeout: 20000 }
+    );
+    if (r.status !== 200) throw new Error(`UNHCR returned ${r.status}`);
 
-    let refugees = [], idps = [];
-    if (refR.status === 'fulfilled' && refR.value.status === 200) {
-      const d = JSON.parse(refR.value.body);
-      refugees = (d.items || []).map(r => ({
-        id: `unhcr-ref-${r.id || Math.random()}`,
+    const data = JSON.parse(r.body);
+    const items = data.items || [];
+
+    // Build refugee flow records from country-of-origin data
+    const refugees = items
+      .filter(r => parseInt(r.refugees) > 10000)
+      .map((r, i) => ({
+        id: `unhcr-ref-${i}`,
         type: 'Refugees',
         originCountry: r.coo_name || 'Unknown',
-        originIso: r.coo || '',
-        asylumCountry: r.coa_name || 'Unknown',
-        asylumIso: r.coa || '',
-        individuals: parseInt(r.individuals) || 0,
+        originIso: r.coo_iso || r.coo || '',
+        asylumCountry: 'Various',
+        asylumIso: '',
+        individuals: parseInt(r.refugees) || 0,
+        idps: parseInt(r.idps) || 0,
         year: r.year || 2023,
         source: 'UNHCR'
-      }));
-    }
-    if (idpR.status === 'fulfilled' && idpR.value.status === 200) {
-      const d = JSON.parse(idpR.value.body);
-      idps = (d.items || []).map(r => ({
-        id: `unhcr-idp-${r.id || Math.random()}`,
-        type: 'IDPs',
-        originCountry: r.coo_name || 'Unknown',
-        originIso: r.coo || '',
-        asylumCountry: r.coa_name || 'Unknown',
-        asylumIso: r.coa || '',
-        individuals: parseInt(r.individuals) || 0,
-        year: r.year || 2023,
-        source: 'UNHCR'
-      }));
-    }
+      }))
+      .sort((a, b) => b.individuals - a.individuals)
+      .slice(0, 50);
 
-    const result = {
-      refugees, idps,
-      totalRefugees: refugees.reduce((s, r) => s + r.individuals, 0),
-      totalIDPs: idps.reduce((s, r) => s + r.individuals, 0),
-      source: 'unhcr'
-    };
+    // Global totals from the aggregate row (coo = "-")
+    const totalsRow = items.find(r => r.coo === '-') || {};
+    const totalRefugees = parseInt(totalsRow.refugees) || refugees.reduce((s,r) => s + r.individuals, 0);
+    const totalIDPs     = parseInt(totalsRow.idps)     || refugees.reduce((s,r) => s + r.idps, 0);
+
+    const result = { refugees, idps: [], totalRefugees, totalIDPs, source: 'unhcr' };
     setCache('unhcr', result, 24 * 60 * 60 * 1000);
     res.json(result);
   } catch (e) {
     console.error('UNHCR error:', e.message);
-    res.status(502).json({ error: e.message, refugees: [], idps: [] });
+    res.status(502).json({ error: e.message, refugees: [], idps: [], totalRefugees: 0, totalIDPs: 0 });
   }
 });
 
@@ -373,7 +336,7 @@ app.get('/proxy/rss', async (req, res) => {
   const results = [];
   await Promise.allSettled(RSS_FEEDS.map(async (feed) => {
     try {
-      const r = await fetchUrl(feed.url);
+      const r = await fetchUrl(feed.url, { timeout: 15000 });
       if (r.status !== 200) throw new Error(`HTTP ${r.status}`);
       const items = parseRSSXml(r.body, feed.name);
       items.forEach(item => {
