@@ -11,7 +11,7 @@ export default defineConfig({
     target: "esnext",
     chunkSizeWarningLimit: 5000,
     rollupOptions: {
-      external: ["react", "react-dom"],
+      external: ["react", "react-dom", "@deck.gl/mesh-layers"],
       output: {
         manualChunks(id) {
           if (id.includes("node_modules/vue") || id.includes("node_modules/pinia") || id.includes("node_modules/vue-router")) {

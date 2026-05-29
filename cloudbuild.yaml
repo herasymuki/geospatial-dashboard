@@ -1,0 +1,15 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+  - 'build'
+  - '--network=cloudbuild'
+  - '-t'
+  - 'gcr.io/$PROJECT_ID/global-conflicts-athena-service:$BUILD_ID'
+  - '.'
+  timeout: '600s'
+images:
+- 'gcr.io/$PROJECT_ID/global-conflicts-athena-service:$BUILD_ID'
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+timeout: '900s'
