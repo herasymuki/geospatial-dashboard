@@ -112,13 +112,18 @@ const viewTabs = [
   { id: "heatmap", label: "Heatmap",    icon: "fa-solid fa-fire" },
 ];
 
-const dataSources = ["ACLED", "UCDP", "GDELT", "ReliefWeb", "RSS Feeds"];
+function fmtBig(n) {
+  if (n >= 1000000) return (n/1000000).toFixed(1)+"M";
+  if (n >= 1000)    return (n/1000).toFixed(0)+"K";
+  return n.toLocaleString();
+}
 
 const headerStats = computed(() => [
-  { label: "Active Conflicts", value: store.activeConflictCount, color: "text-red" },
-  { label: "Total Events",     value: store.allEvents.length.toLocaleString(), color: "text-orange" },
-  { label: "Fatalities",       value: store.totalFatalities.toLocaleString(), color: "text-red" },
-  { label: "Data Sources",     value: "5 Live", color: "text-green" },
+  { label: "Countries",  value: store.activeConflictCount,               color: "text-red" },
+  { label: "Events",     value: store.allEvents.length.toLocaleString(), color: "text-orange" },
+  { label: "Fatalities", value: fmtBig(store.totalFatalities),           color: "text-red" },
+  { label: "Refugees",   value: fmtBig(store.totalRefugees),             color: "text-yellow" },
+  { label: "Sources",    value: "6 Live",                                color: "text-green" },
 ]);
 
 function formatTime(iso) {

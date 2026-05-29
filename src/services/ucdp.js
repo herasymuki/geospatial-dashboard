@@ -1,18 +1,13 @@
 import axios from "axios";
 
-// UCDP GED API — fully open
-// Docs: https://ucdp.uu.se/apidocs/
-const BASE = "https://ucdpapi.pcr.uu.se/api/gedevents/23.1";
-
-export async function fetchUCDPConflicts(limit = 300) {
+// UCDP GED — Uppsala Conflict Data Program Georeferenced Event Dataset
+// Proxied through /proxy/ucdp (server tries v24.1 then v23.1 with fallback)
+export async function fetchUCDPConflicts(limit = 500) {
   try {
-    const res = await axios.get(BASE, {
-      params: { pagesize: limit, page: 1 },
-      timeout: 15000
-    });
+    const res = await axios.get("/proxy/ucdp", { timeout: 20000 });
     return res.data?.Result || [];
   } catch (err) {
-    console.warn("UCDP fetch failed, using mock data:", err.message);
+    console.warn("UCDP fetch failed:", err.message);
     return getMockUCDPData();
   }
 }
@@ -27,7 +22,7 @@ function getMockUCDPData() {
     { id:"ucdp-6", latitude:"15.35", longitude:"44.20", country:"Yemen", region:"Middle East", type_of_violence_label:"State-based conflict", conflict_name:"Yemen Civil War", best:"18000", date_start:"2015-03-26", side_a:"Houthi movement", side_b:"Saudi-led coalition" },
     { id:"ucdp-7", latitude:"33.93", longitude:"67.71", country:"Afghanistan", region:"Asia", type_of_violence_label:"Non-state conflict", conflict_name:"Afghanistan insurgency", best:"5400", date_start:"2001-10-07", side_a:"Taliban", side_b:"ISIS-K" },
     { id:"ucdp-8", latitude:"9.14", longitude:"40.49", country:"Ethiopia", region:"Africa", type_of_violence_label:"State-based conflict", conflict_name:"Tigray conflict", best:"12000", date_start:"2020-11-04", side_a:"Government of Ethiopia", side_b:"TPLF" },
-    { id:"ucdp-9", latitude:"12.36", longitude:"43.15", country:"Djibouti", region:"Africa", type_of_violence_label:"One-sided violence", conflict_name:"Horn of Africa tensions", best:"120", date_start:"2023-01-01", side_a:"Armed group", side_b:"Civilians" },
-    { id:"ucdp-10", latitude:"19.76", longitude:"96.08", country:"Myanmar", region:"Asia", type_of_violence_label:"State-based conflict", conflict_name:"Myanmar civil war", best:"7800", date_start:"2021-02-01", side_a:"Tatmadaw", side_b:"PDF/EAOs" },
+    { id:"ucdp-9", latitude:"19.76", longitude:"96.08", country:"Myanmar", region:"Asia", type_of_violence_label:"State-based conflict", conflict_name:"Myanmar civil war", best:"7800", date_start:"2021-02-01", side_a:"Tatmadaw", side_b:"PDF/EAOs" },
+    { id:"ucdp-10", latitude:"31.95", longitude:"35.23", country:"Palestine", region:"Middle East", type_of_violence_label:"State-based conflict", conflict_name:"Gaza conflict", best:"35000", date_start:"2023-10-07", side_a:"IDF", side_b:"Hamas" },
   ];
 }

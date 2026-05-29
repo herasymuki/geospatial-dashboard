@@ -84,6 +84,8 @@ const legend = [
   { label: "High (10–99)",    color: "#ff6d00" },
   { label: "Medium (1–9)",    color: "#ffd600" },
   { label: "Low (0)",         color: "#00e5ff" },
+  { label: "GDACS Alert",     color: "#ff1744" },
+  { label: "Refugee Flow",    color: "#fbbf24" },
 ];
 
 const SEVERITY_COLORS = {
@@ -208,6 +210,25 @@ function updateGlobeData() {
     .labelColor(() => "rgba(255,255,255,0.85)")
     .labelResolution(2)
     .labelAltitude(0.01);
+
+  // Rings — GDACS alerts (pulsing rings at alert locations)
+  const gdacsRings = (store.gdacsAlerts || []).map(a => ({
+    lat: a.lat, lng: a.lng,
+    maxR: a.alertLevel === "Red" ? 4 : a.alertLevel === "Orange" ? 3 : 2,
+    propagationSpeed: a.alertLevel === "Red" ? 3 : 2,
+    repeatPeriod: a.alertLevel === "Red" ? 700 : 1000,
+    color: a.alertLevel === "Red" ? "#ff1744" : a.alertLevel === "Orange" ? "#ff6d00" : "#ffd600",
+    label: a.title || a.country
+  }));
+
+  globeInstance
+    .ringsData(gdacsRings)
+    .ringLat(d => d.lat)
+    .ringLng(d => d.lng)
+    .ringMaxRadius(d => d.maxR)
+    .ringPropagationSpeed(d => d.propagationSpeed)
+    .ringRepeatPeriod(d => d.repeatPeriod)
+    .ringColor(d => t => `${d.color}${Math.round((1 - t) * 200).toString(16).padStart(2, "0")}`);
 }
 
 function resetView() {

@@ -1,20 +1,10 @@
 import axios from "axios";
 
 // GDELT 2.0 DOC API — fully open, no key required
-// Returns conflict-related events from past 24h
-const BASE = "https://api.gdeltproject.org/api/v2/doc/doc";
-
+// Proxied through /proxy/gdelt to avoid CORS (10-min server-side cache)
 export async function fetchGDELTEvents() {
   try {
-    const params = {
-      query: "war conflict military attack explosion",
-      mode: "artlist",
-      maxrecords: 75,
-      format: "json",
-      timespan: "7d",
-      sort: "DateDesc"
-    };
-    const res = await axios.get(BASE, { params, timeout: 15000 });
+    const res = await axios.get("/proxy/gdelt", { timeout: 15000 });
     const articles = res.data?.articles || [];
     return articles.map(a => ({
       id: a.url,
@@ -28,7 +18,7 @@ export async function fetchGDELTEvents() {
       relevance: parseFloat(a.relevance) || 0
     }));
   } catch (err) {
-    console.warn("GDELT fetch failed, using mock data:", err.message);
+    console.warn("GDELT fetch failed:", err.message);
     return getMockGDELTData();
   }
 }
