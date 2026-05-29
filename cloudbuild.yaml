@@ -2,14 +2,29 @@ steps:
 - name: 'gcr.io/cloud-builders/docker'
   args:
   - 'build'
-  - '--network=cloudbuild'
+  - '--no-cache'
   - '-t'
-  - 'gcr.io/$PROJECT_ID/global-conflicts-athena-service:$BUILD_ID'
+  - 'gcr.io/$PROJECT_ID/global-conflicts-athena-service:$COMMIT_SHA'
   - '.'
-  timeout: '600s'
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+  - 'push'
+  - 'gcr.io/$PROJECT_ID/global-conflicts-athena-service:$COMMIT_SHA'
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: gcloud
+  args:
+  - 'run'
+  - 'deploy'
+  - 'global-conflicts-athena-service'
+  - '--image'
+  - 'gcr.io/$PROJECT_ID/global-conflicts-athena-service:$COMMIT_SHA'
+  - '--region'
+  - 'us-central1'
+  - '--project'
+  - 's4d-athena-hosting'
+  - '--allow-unauthenticated'
+  - '--quiet'
 images:
-- 'gcr.io/$PROJECT_ID/global-conflicts-athena-service:$BUILD_ID'
+- 'gcr.io/$PROJECT_ID/global-conflicts-athena-service:$COMMIT_SHA'
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: 'E2_HIGHCPU_8'
-timeout: '900s'
