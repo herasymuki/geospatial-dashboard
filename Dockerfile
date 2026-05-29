@@ -2,11 +2,11 @@
 FROM node:20-slim AS builder
 WORKDIR /app
 
-# Copy lock files first for better layer caching
-COPY package.json package-lock.json .npmrc ./
+# Copy manifests first for layer caching
+COPY package.json .npmrc ./
 
-# Install dependencies using lock file (faster + deterministic)
-RUN npm ci --ignore-scripts --no-audit --no-fund
+# Install all dependencies (including postinstall scripts for esbuild/rollup native binaries)
+RUN npm install --legacy-peer-deps --no-audit --no-fund
 
 # Copy source files
 COPY . .

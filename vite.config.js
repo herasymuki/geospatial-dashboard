@@ -13,13 +13,12 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          "vendor-vue": ["vue", "vue-router", "pinia"],
-          "vendor-three": ["three"],
-          "vendor-deck": ["deck.gl", "@deck.gl/core", "@deck.gl/layers", "@deck.gl/geo-layers"],
-          "vendor-luma": ["@luma.gl/core"],
+          "vendor-vue":    ["vue", "vue-router", "pinia"],
+          "vendor-three":  ["three"],
+          "vendor-deck":   ["deck.gl", "@deck.gl/core", "@deck.gl/layers", "@deck.gl/geo-layers"],
+          "vendor-luma":   ["@luma.gl/core"],
           "vendor-charts": ["chart.js", "vue-chartjs"],
-          "vendor-d3": ["d3", "d3-scale-chromatic"],
-          "vendor-fa": ["@fortawesome/fontawesome-free"]
+          "vendor-d3":     ["d3", "d3-scale-chromatic"]
         }
       }
     }

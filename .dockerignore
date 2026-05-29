@@ -6,3 +6,4 @@ dist
 .env*
 cloudbuild*.yaml
 deploy.sh
+package-lock.json
