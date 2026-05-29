@@ -134,7 +134,11 @@ async function initDeck() {
     // Keep viewState in sync so layers re-render on pan/zoom
     onViewStateChange: ({ viewState }) => {
       currentViewState = viewState;
-      if (deckInstance) deckInstance.setProps({ viewState });
+      if (deckInstance) {
+        deckInstance.setProps({ viewState });
+        // Refresh basemap tiles on every pan/zoom so tiles match current view
+        updateLayers();
+      }
     },
 
     onHover: ({ object, x, y }) => {
@@ -152,21 +156,52 @@ async function initDeck() {
   await updateLayers();
 }
 
-// ── Tile basemap builder (pure BitmapLayer — no @deck.gl/geo-layers needed) ──
-function buildTileBasemap(BitmapLayer) {
-  // CartoDB Dark Matter tiles at zoom=2 (4×4 grid = 16 tiles covering the world)
-  const zoom = 2;
+// ── Tile basemap builder — dynamic tiles responding to viewState ──────────────
+// Correct Web Mercator inverse projection; covers only visible tiles at the
+// current zoom level so the map is always crisp and data points are aligned.
+
+function mercatorYToLat(y, zoom) {
   const n = Math.pow(2, zoom);
+  return (180 / Math.PI) * Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / n)));
+}
+
+function buildTileBasemap(BitmapLayer, viewState) {
+  const vZoom  = viewState?.zoom      ?? 2;
+  const lng    = viewState?.longitude ?? 0;
+  const lat    = viewState?.latitude  ?? 0;
+  const zoom   = Math.max(0, Math.min(8, Math.floor(vZoom)));
+  const n      = Math.pow(2, zoom);
   const layers = [];
-  for (let x = 0; x < n; x++) {
-    for (let y = 0; y < n; y++) {
-      const west  = (x / n) * 360 - 180;
-      const east  = ((x + 1) / n) * 360 - 180;
-      const north = yToLat(y, zoom);
-      const south = yToLat(y + 1, zoom);
+
+  // Centre tile in tile-space
+  const cx = Math.floor(((lng + 180) / 360) * n);
+  const sinLat = Math.sin((lat * Math.PI) / 180);
+  const cy = Math.floor(
+    ((1 - Math.log((1 + sinLat) / (1 - sinLat)) / (2 * Math.PI)) / 2) * n
+  );
+
+  // Pad viewport by extra tiles each side for smooth panning
+  const halfX = Math.ceil((window.innerWidth  / 256) / 2) + 3;
+  const halfY = Math.ceil((window.innerHeight / 256) / 2) + 3;
+
+  const seen = new Set();
+  for (let dx = -halfX; dx <= halfX; dx++) {
+    for (let dy = -halfY; dy <= halfY; dy++) {
+      const tx = ((cx + dx) % n + n) % n;  // wrap longitude
+      const ty = cy + dy;
+      if (ty < 0 || ty >= n) continue;
+      const key = `${zoom}-${tx}-${ty}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const west  = (tx / n) * 360 - 180;
+      const east  = ((tx + 1) / n) * 360 - 180;
+      const north = mercatorYToLat(ty,     zoom);
+      const south = mercatorYToLat(ty + 1, zoom);
+
       layers.push(new BitmapLayer({
-        id:     `basemap-${x}-${y}`,
-        image:  `https://basemaps.cartocdn.com/dark_all/${zoom}/${x}/${y}.png`,
+        id:     `basemap-${key}`,
+        image:  `https://basemaps.cartocdn.com/dark_all/${zoom}/${tx}/${ty}.png`,
         bounds: [west, south, east, north],
         opacity: 1,
       }));
@@ -175,18 +210,13 @@ function buildTileBasemap(BitmapLayer) {
   return layers;
 }
 
-function yToLat(y, zoom) {
-  const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, zoom);
-  return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-}
-
 // ── Layer builder ────────────────────────────────────────────────────────────
 async function updateLayers() {
   if (!deckInstance) return;
 
   // ── 1. Basemap — CartoDB Dark Matter tiles via BitmapLayer (no geo-layers dep) ──
   const { BitmapLayer } = await import("@deck.gl/layers");
-  const basemap = buildTileBasemap(BitmapLayer);
+  const basemap = buildTileBasemap(BitmapLayer, currentViewState);
 
   // ── 2. Data layers ────────────────────────────────────────────────────────
   const events = store.allEvents;
