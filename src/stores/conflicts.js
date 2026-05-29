@@ -33,22 +33,41 @@ export const useConflictsStore = defineStore("conflicts", () => {
 
   // ── Normalize all event sources into a unified schema ─────────────────────
   const allEventsRaw = computed(() => {
-    const u = ucdpConflicts.value.map(c => ({
-      id: `ucdp-${c.id || Math.random()}`,
-      source: "UCDP",
-      lat: parseFloat(c.latitude) || 0,
-      lng: parseFloat(c.longitude) || 0,
-      country: c.country || "Unknown",
-      region: c.region || "Unknown",
-      type: c.type_of_violence_label || "Armed Conflict",
-      subtype: c.conflict_name || "",
-      fatalities: parseInt(c.best) || 0,
-      date: c.date_start || "",
-      notes: c.conflict_name || "",
-      actor1: c.side_a || "",
-      actor2: c.side_b || "",
-      severity: severityScore(parseInt(c.best) || 0)
-    }));
+    // UCDP typeOfViolence integer → label (standard UCDP coding)
+    const ucdpTypeLabel = (v) => {
+      const n = parseInt(v);
+      if (n === 1) return "State-based conflict";
+      if (n === 2) return "Non-state conflict";
+      if (n === 3) return "One-sided violence";
+      return v || "Armed Conflict";
+    };
+
+    const u = ucdpConflicts.value.map(c => {
+      // Support both snake_case (mock/API) and camelCase (CSV proxy) field names
+      const fatalities  = parseInt(c.best ?? c.deaths) || 0;
+      const date        = c.date_start ?? c.dateStart ?? "";
+      const typeLabel   = c.type_of_violence_label ?? ucdpTypeLabel(c.typeOfViolence);
+      const conflictName = c.conflict_name ?? c.conflictName ?? "";
+      const actor1      = c.side_a ?? c.sideA ?? "";
+      const actor2      = c.side_b ?? c.sideB ?? "";
+      const region      = c.region ?? regionFromCountry(c.country);
+      return {
+        id: `ucdp-${c.id || Math.random()}`,
+        source: "UCDP",
+        lat: parseFloat(c.latitude) || 0,
+        lng: parseFloat(c.longitude) || 0,
+        country: c.country || "Unknown",
+        region,
+        type: typeLabel,
+        subtype: conflictName,
+        fatalities,
+        date,
+        notes: conflictName,
+        actor1,
+        actor2,
+        severity: severityScore(fatalities)
+      };
+    });
 
     const g = gdacsAlerts.value.map(a => ({
       id: a.id,
