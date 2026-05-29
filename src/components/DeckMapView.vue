@@ -152,33 +152,41 @@ async function initDeck() {
   await updateLayers();
 }
 
+// ── Tile basemap builder (pure BitmapLayer — no @deck.gl/geo-layers needed) ──
+function buildTileBasemap(BitmapLayer) {
+  // CartoDB Dark Matter tiles at zoom=2 (4×4 grid = 16 tiles covering the world)
+  const zoom = 2;
+  const n = Math.pow(2, zoom);
+  const layers = [];
+  for (let x = 0; x < n; x++) {
+    for (let y = 0; y < n; y++) {
+      const west  = (x / n) * 360 - 180;
+      const east  = ((x + 1) / n) * 360 - 180;
+      const north = yToLat(y, zoom);
+      const south = yToLat(y + 1, zoom);
+      layers.push(new BitmapLayer({
+        id:     `basemap-${x}-${y}`,
+        image:  `https://basemaps.cartocdn.com/dark_all/${zoom}/${x}/${y}.png`,
+        bounds: [west, south, east, north],
+        opacity: 1,
+      }));
+    }
+  }
+  return layers;
+}
+
+function yToLat(y, zoom) {
+  const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, zoom);
+  return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+}
+
 // ── Layer builder ────────────────────────────────────────────────────────────
 async function updateLayers() {
   if (!deckInstance) return;
 
-  // ── 1. Basemap tile layer (CartoDB Dark Matter — no API key required) ──────
-  const { TileLayer }       = await import("@deck.gl/geo-layers");
-  const { BitmapLayer }     = await import("@deck.gl/layers");
-
-  const basemap = new TileLayer({
-    id:   "basemap-tiles",
-    // CartoDB Dark Matter — free, no token, dark theme
-    data: "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-    minZoom: 0,
-    maxZoom: 19,
-    tileSize: 256,
-    renderSubLayers: (props) => {
-      const { boundingBox } = props.tile;
-      return new BitmapLayer(props, {
-        data:   null,
-        image:  props.data,
-        bounds: [
-          boundingBox[0][0], boundingBox[0][1],
-          boundingBox[1][0], boundingBox[1][1],
-        ],
-      });
-    },
-  });
+  // ── 1. Basemap — CartoDB Dark Matter tiles via BitmapLayer (no geo-layers dep) ──
+  const { BitmapLayer } = await import("@deck.gl/layers");
+  const basemap = buildTileBasemap(BitmapLayer);
 
   // ── 2. Data layers ────────────────────────────────────────────────────────
   const events = store.allEvents;
@@ -274,7 +282,7 @@ async function updateLayers() {
   }
 
   // Basemap always first, data layers on top
-  deckInstance.setProps({ layers: [basemap, ...dataLayers] });
+  deckInstance.setProps({ layers: [...basemap, ...dataLayers] });
 }
 
 // ── Reset view ───────────────────────────────────────────────────────────────
