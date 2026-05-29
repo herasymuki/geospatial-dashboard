@@ -4,7 +4,7 @@
     <header class="topbar">
       <div class="topbar-left">
         <div class="logo">
-          <span class="logo-icon">⚡</span>
+          <span class="logo-icon"><i class="fa-solid fa-bolt"></i></span>
           <span class="logo-text">ATHENA</span>
           <span class="logo-sub">Global Conflicts Intelligence</span>
         </div>
@@ -21,7 +21,7 @@
           <span class="status-text">{{ store.loading ? 'Fetching live data...' : 'Live' }}</span>
         </div>
         <button class="refresh-btn" @click="store.fetchAll()" :disabled="store.loading">
-          <span :class="{ spinning: store.loading }">↻</span> Refresh
+          <i class="fa-solid fa-rotate-right" :class="{ spinning: store.loading }"></i> Refresh
         </button>
         <span class="last-updated" v-if="store.lastUpdated">
           Updated {{ formatTime(store.lastUpdated) }}
@@ -31,7 +31,7 @@
 
     <!-- ── Error Banner ── -->
     <div class="error-banner" v-if="store.errors.length">
-      <span>⚠ Some data sources unavailable — showing cached/mock data:</span>
+      <span><i class="fa-solid fa-triangle-exclamation"></i> Some data sources unavailable — showing cached/mock data:</span>
       <span v-for="e in store.errors" :key="e" class="error-item">{{ e }}</span>
     </div>
 
@@ -54,7 +54,7 @@
             class="tab-btn"
             :class="{ active: activeView === tab.id }"
             @click="activeView = tab.id"
-          >{{ tab.label }}</button>
+          ><i :class="tab.icon"></i> {{ tab.label }}</button>
         </div>
         <GlobeView v-show="activeView === 'globe'" />
         <DeckMapView v-show="activeView === 'deck'" />
@@ -77,7 +77,7 @@
     <!-- ── Loading Overlay ── -->
     <div class="loading-overlay" v-if="store.loading && store.allEvents.length === 0">
       <div class="loader-content">
-        <div class="loader-globe">🌍</div>
+        <div class="loader-globe"><i class="fa-solid fa-earth-americas fa-spin"></i></div>
         <div class="loader-text">Fetching global conflict data...</div>
         <div class="loader-sources">
           <span v-for="src in dataSources" :key="src" class="source-tag">{{ src }}</span>
@@ -107,9 +107,9 @@ const store = useConflictsStore();
 const activeView = ref("globe");
 
 const viewTabs = [
-  { id: "globe",   label: "🌍 3D Globe" },
-  { id: "deck",    label: "🗺 Deck.gl Map" },
-  { id: "heatmap", label: "🔥 Heatmap" },
+  { id: "globe",   label: "3D Globe",   icon: "fa-solid fa-earth-americas" },
+  { id: "deck",    label: "Deck.gl Map", icon: "fa-solid fa-map" },
+  { id: "heatmap", label: "Heatmap",    icon: "fa-solid fa-fire" },
 ];
 
 const dataSources = ["ACLED", "UCDP", "GDELT", "ReliefWeb", "RSS Feeds"];

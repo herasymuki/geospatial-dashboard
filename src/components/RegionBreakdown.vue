@@ -1,6 +1,6 @@
 <template>
   <div class="panel chart-panel">
-    <h3 class="panel-title">🌐 Top Conflict Zones</h3>
+    <h3 class="panel-title"><i class="fa-solid fa-earth-americas"></i> Top Conflict Zones</h3>
     <div class="region-list">
       <div v-for="(c, i) in store.topConflicts" :key="c.country" class="region-row"
            @click="store.selectConflict(store.allEvents.find(e => e.country === c.country))">

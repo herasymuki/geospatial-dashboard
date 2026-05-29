@@ -1,9 +1,9 @@
 <template>
   <div class="panel stats-panel">
-    <h3 class="panel-title">📊 Global Statistics</h3>
+    <h3 class="panel-title"><i class="fa-solid fa-chart-bar"></i> Global Statistics</h3>
     <div class="stats-grid">
       <div v-for="stat in stats" :key="stat.label" class="stat-card">
-        <div class="stat-icon">{{ stat.icon }}</div>
+        <div class="stat-icon"><i :class="stat.icon"></i></div>
         <div class="stat-number" :class="stat.color">{{ stat.value }}</div>
         <div class="stat-desc">{{ stat.label }}</div>
       </div>
@@ -26,12 +26,12 @@ import { useConflictsStore } from "@/stores/conflicts";
 const store = useConflictsStore();
 
 const stats = computed(() => [
-  { icon: "🌍", label: "Countries Affected",  value: store.activeConflictCount, color: "text-red" },
-  { icon: "⚔️",  label: "Total Events",        value: store.allEvents.length.toLocaleString(), color: "text-orange" },
-  { icon: "💀",  label: "Total Fatalities",    value: store.totalFatalities.toLocaleString(), color: "text-red" },
-  { icon: "📰",  label: "News Articles",       value: store.newsItems.length, color: "text-blue" },
-  { icon: "🚨",  label: "Critical Events",     value: store.allEvents.filter(e => e.severity === "critical").length, color: "text-red" },
-  { icon: "📡",  label: "GDELT Articles",      value: store.gdeltEvents.length, color: "text-green" },
+  { icon: "fa-solid fa-earth-americas", label: "Countries Affected",  value: store.activeConflictCount, color: "text-red" },
+  { icon: "fa-solid fa-shield-halved",  label: "Total Events",        value: store.allEvents.length.toLocaleString(), color: "text-orange" },
+  { icon: "fa-solid fa-skull",  label: "Total Fatalities",    value: store.totalFatalities.toLocaleString(), color: "text-red" },
+  { icon: "fa-solid fa-newspaper",  label: "News Articles",       value: store.newsItems.length, color: "text-blue" },
+  { icon: "fa-solid fa-circle-exclamation",  label: "Critical Events",     value: store.allEvents.filter(e => e.severity === "critical").length, color: "text-red" },
+  { icon: "fa-solid fa-satellite-dish",  label: "GDELT Articles",      value: store.gdeltEvents.length, color: "text-green" },
 ]);
 
 const dataSources = computed(() => [

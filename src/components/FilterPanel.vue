@@ -1,6 +1,6 @@
 <template>
   <div class="panel filter-panel">
-    <h3 class="panel-title">🔍 Filters</h3>
+    <h3 class="panel-title"><i class="fa-solid fa-sliders"></i> Filters</h3>
     <div class="filter-group">
       <label class="filter-label">Event Types</label>
       <div class="filter-chips">
@@ -37,7 +37,7 @@
         <input type="date" v-model="dateTo" class="date-input" />
       </div>
     </div>
-    <button class="reset-filters-btn" @click="resetFilters">↺ Reset Filters</button>
+    <button class="reset-filters-btn" @click="resetFilters"><i class="fa-solid fa-rotate-left"></i> Reset Filters</button>
   </div>
 </template>
 

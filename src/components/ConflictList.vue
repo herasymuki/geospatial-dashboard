@@ -1,6 +1,6 @@
 <template>
   <div class="panel conflict-list-panel">
-    <h3 class="panel-title">🔴 Active Conflicts
+    <h3 class="panel-title"><i class="fa-solid fa-circle-exclamation" style="color:#ef4444"></i> Active Conflicts
       <span class="badge">{{ store.conflictsByCountry.length }}</span>
     </h3>
     <div class="search-box">

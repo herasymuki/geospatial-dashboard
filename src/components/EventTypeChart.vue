@@ -1,6 +1,6 @@
 <template>
   <div class="panel chart-panel">
-    <h3 class="panel-title">🎯 Event Types</h3>
+    <h3 class="panel-title"><i class="fa-solid fa-bullseye"></i> Event Types</h3>
     <div class="chart-wrapper">
       <Doughnut v-if="chartData.labels.length" :data="chartData" :options="chartOptions" />
       <div v-else class="chart-empty">Loading...</div>

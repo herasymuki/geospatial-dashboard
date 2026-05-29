@@ -1,6 +1,6 @@
 <template>
   <div class="panel chart-panel">
-    <h3 class="panel-title">📈 Events Timeline</h3>
+    <h3 class="panel-title"><i class="fa-solid fa-chart-line"></i> Events Timeline</h3>
     <div class="chart-wrapper">
       <Line v-if="chartData.labels.length" :data="chartData" :options="chartOptions" />
       <div v-else class="chart-empty">Loading timeline data...</div>

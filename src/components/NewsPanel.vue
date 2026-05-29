@@ -1,6 +1,6 @@
 <template>
   <div class="panel news-panel">
-    <h3 class="panel-title">📰 Live Intelligence Feed</h3>
+    <h3 class="panel-title"><i class="fa-solid fa-satellite-dish"></i> Live Intelligence Feed</h3>
     <div class="news-list">
       <div v-if="store.newsItems.length === 0 && !store.loading" class="news-empty">
         No news items loaded

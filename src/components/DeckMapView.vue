@@ -2,7 +2,7 @@
   <div class="deckmap-container" ref="containerRef">
     <canvas ref="canvasRef" class="deck-canvas"></canvas>
     <div class="deck-controls">
-      <button @click="resetView">⌂ Reset</button>
+      <button @click="resetView"><i class="fa-solid fa-crosshairs"></i> Reset</button>
       <select v-model="activeLayer" class="layer-select">
         <option value="scatter">Scatter Plot</option>
         <option value="hexagon">Hexagon Aggregation</option>
@@ -14,7 +14,7 @@
          :style="{ left: deckTooltip.x + 'px', top: deckTooltip.y + 'px' }">
       <div v-if="deckTooltip.object">
         <div class="tt-country">{{ deckTooltip.object.country || deckTooltip.object.points?.length + ' events' }}</div>
-        <div v-if="deckTooltip.object.fatalities !== undefined">💀 {{ deckTooltip.object.fatalities }} fatalities</div>
+        <div v-if="deckTooltip.object.fatalities !== undefined"><i class="fa-solid fa-skull"></i> {{ deckTooltip.object.fatalities }} fatalities</div>
         <div v-if="deckTooltip.object.type">{{ deckTooltip.object.type }}</div>
       </div>
     </div>
