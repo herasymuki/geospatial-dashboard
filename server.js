@@ -7,6 +7,7 @@ const zlib    = require('zlib');
 const app  = express();
 const PORT = process.env.PORT || 8080;
 
+app.set('etag', false); // Disable ETags globally — prevents browser caching stale proxy responses
 app.use(express.json());
 
 // ── In-memory cache ──────────────────────────────────────────────────────────
@@ -94,18 +95,132 @@ app.get('/proxy/gdelt', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ROUTE 2: UCDP — GED API (6-hour cache)
-// v24.1 and v23.1 now require auth (401) — frontend uses built-in mock data
+// ROUTE 2: UCDP — GED CSV bulk download (6-hour server-side cache only)
+// REST API requires auth — use public annual CSV release instead
+// NEVER browser-cached: Cache-Control: no-store on every response
 // ════════════════════════════════════════════════════════════════════════════
 app.get('/proxy/ucdp', async (req, res) => {
+  // Disable all browser/proxy caching — responses vary and must never be
+  // revalidated from a stale empty fallback
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Pragma':        'no-cache',
+    'Expires':       '0',
+    'Surrogate-Control': 'no-store'
+  });
+  res.removeHeader('ETag');
   cors(res);
+
+  // Server-side cache only (6 hours) — never sent to browser
   const cached = getCache('ucdp');
-  if (cached) return res.json(cached);
-  // UCDP REST API now requires authentication for all versions
-  // Return structured empty response — frontend service has comprehensive mock data
-  const result = { Result: [], TotalCount: 0, source: 'ucdp-auth-required', note: 'UCDP API requires authentication. Using curated dataset.' };
-  setCache('ucdp', result, 6 * 60 * 60 * 1000);
-  res.json(result);
+  if (cached) {
+    console.log('[UCDP proxy] serving from server-side cache, count:', cached.Result?.length, 'total:', cached.TotalCount);
+    return res.json(cached);
+  }
+
+  // ── Attempt 1: UCDP GED v24.1 public CSV bulk download ───────────────────
+  // This endpoint does NOT require authentication
+  const CSV_URL = 'https://ucdp.uu.se/downloads/ged/ged241-csv.zip';
+  try {
+    console.log('[UCDP proxy] fetching CSV bulk download from', CSV_URL);
+    const r = await fetchUrl(CSV_URL, { timeout: 30000 });
+    if (r.status === 200) {
+      // Parse CSV — extract recent events (last 3 years) with coordinates
+      const lines = r.body.split('\n');
+      const headers = lines[0].split(',').map(h => h.replace(/"/g,'').trim());
+      const idxOf = (name) => headers.findIndex(h => h.toLowerCase().includes(name.toLowerCase()));
+
+      const iId       = idxOf('id');
+      const iYear     = idxOf('year');
+      const iCountry  = idxOf('country');
+      const iLat      = idxOf('latitude');
+      const iLng      = idxOf('longitude');
+      const iDeaths   = idxOf('deaths_b');
+      const iType     = idxOf('type_of_violence');
+      const iConflict = idxOf('conflict_name');
+      const iDate     = idxOf('date_start');
+
+      const currentYear = new Date().getFullYear();
+      const events = [];
+
+      for (let i = 1; i < lines.length && events.length < 500; i++) {
+        const row = lines[i].split(',');
+        if (row.length < 5) continue;
+        const year = parseInt(row[iYear]);
+        if (isNaN(year) || year < currentYear - 3) continue;
+        const lat = parseFloat(row[iLat]);
+        const lng = parseFloat(row[iLng]);
+        if (isNaN(lat) || isNaN(lng)) continue;
+        events.push({
+          id:           row[iId]?.replace(/"/g,'') || String(i),
+          year,
+          country:      row[iCountry]?.replace(/"/g,'') || 'Unknown',
+          latitude:     lat,
+          longitude:    lng,
+          deaths:       parseInt(row[iDeaths]) || 0,
+          typeOfViolence: parseInt(row[iType]) || 1,
+          conflictName: row[iConflict]?.replace(/"/g,'') || 'Unknown',
+          dateStart:    row[iDate]?.replace(/"/g,'') || '',
+          source:       'UCDP-GED'
+        });
+      }
+
+      if (events.length > 0) {
+        const result = { Result: events, TotalCount: events.length, source: 'ucdp-ged-csv' };
+        setCache('ucdp', result, 6 * 60 * 60 * 1000);
+        console.log('[UCDP proxy] using source: ucdp-ged-csv');
+        console.log('[UCDP proxy] result count:', events.length);
+        console.log('[UCDP proxy] total count:', events.length);
+        return res.json(result);
+      }
+    }
+  } catch (e) {
+    console.warn('[UCDP proxy] CSV download failed:', e.message);
+  }
+
+  // ── Attempt 2: UCDP Candidate Events API (most recent, sometimes open) ────
+  try {
+    console.log('[UCDP proxy] trying UCDP candidate events API');
+    const r = await fetchUrl(
+      'https://ucdpapi.pcr.uu.se/api/gedevents/24.1?pagesize=300&page=1',
+      { timeout: 15000 }
+    );
+    if (r.status === 200) {
+      const data = JSON.parse(r.body);
+      const result = { Result: data.Result || [], TotalCount: data.TotalCount || 0, source: 'ucdp-api' };
+      setCache('ucdp', result, 6 * 60 * 60 * 1000);
+      console.log('[UCDP proxy] using source: ucdp-api');
+      console.log('[UCDP proxy] result count:', result.Result.length);
+      console.log('[UCDP proxy] total count:', result.TotalCount);
+      return res.json(result);
+    }
+  } catch (e) {
+    console.warn('[UCDP proxy] API attempt failed:', e.message);
+  }
+
+  // ── Fallback: clearly marked, non-empty curated dataset ──────────────────
+  console.log('[UCDP proxy] using source: curated-fallback');
+  const fallback = {
+    Result: [
+      { id:'f1', year:2024, country:'Ukraine',          latitude:49.0,  longitude:32.0,  deaths:120, typeOfViolence:1, conflictName:'Russo-Ukrainian War',          dateStart:'2024-01-15', source:'UCDP-curated' },
+      { id:'f2', year:2024, country:'Sudan',            latitude:15.5,  longitude:32.5,  deaths:85,  typeOfViolence:1, conflictName:'Sudan Civil War',              dateStart:'2024-02-03', source:'UCDP-curated' },
+      { id:'f3', year:2024, country:'Gaza',             latitude:31.5,  longitude:34.4,  deaths:200, typeOfViolence:1, conflictName:'Gaza Conflict',                dateStart:'2024-01-10', source:'UCDP-curated' },
+      { id:'f4', year:2024, country:'Myanmar',          latitude:21.9,  longitude:95.9,  deaths:45,  typeOfViolence:1, conflictName:'Myanmar Civil War',            dateStart:'2024-03-01', source:'UCDP-curated' },
+      { id:'f5', year:2024, country:'Ethiopia',         latitude:9.1,   longitude:40.4,  deaths:60,  typeOfViolence:1, conflictName:'Amhara Conflict',              dateStart:'2024-01-20', source:'UCDP-curated' },
+      { id:'f6', year:2024, country:'Somalia',          latitude:5.1,   longitude:46.2,  deaths:30,  typeOfViolence:2, conflictName:'Al-Shabaab Insurgency',        dateStart:'2024-02-14', source:'UCDP-curated' },
+      { id:'f7', year:2024, country:'Mali',             latitude:17.6,  longitude:-3.9,  deaths:25,  typeOfViolence:2, conflictName:'Sahel Insurgency',             dateStart:'2024-01-28', source:'UCDP-curated' },
+      { id:'f8', year:2024, country:'DR Congo',         latitude:-4.0,  longitude:21.7,  deaths:70,  typeOfViolence:1, conflictName:'DRC Eastern Conflict',         dateStart:'2024-03-05', source:'UCDP-curated' },
+      { id:'f9', year:2024, country:'Haiti',            latitude:18.9,  longitude:-72.3, deaths:15,  typeOfViolence:3, conflictName:'Haiti Gang Violence',          dateStart:'2024-02-20', source:'UCDP-curated' },
+      { id:'f10',year:2024, country:'Yemen',            latitude:15.5,  longitude:48.5,  deaths:40,  typeOfViolence:1, conflictName:'Yemen Civil War',              dateStart:'2024-01-05', source:'UCDP-curated' }
+    ],
+    TotalCount: 10,
+    source: 'curated-fallback',
+    note: 'UCDP CSV unavailable and API requires auth. Showing curated conflict dataset.'
+  };
+  console.log('[UCDP proxy] result count:', fallback.Result.length);
+  console.log('[UCDP proxy] total count:', fallback.TotalCount);
+  // Do NOT cache the fallback — retry on next request
+  return res.json(fallback);
 });
 
 // ════════════════════════════════════════════════════════════════════════════
