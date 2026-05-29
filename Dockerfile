@@ -1,5 +1,5 @@
 # ── Stage 1: Build ──────────────────────────────────────────────
-FROM node:20 AS builder
+FROM node:20-slim AS builder
 WORKDIR /app
 
 # Install build dependencies for native modules
@@ -7,11 +7,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy manifests
-COPY package.json .npmrc ./
+# Copy manifests + lockfile
+COPY package.json package-lock.json .npmrc ./
 
-# Install dependencies
-RUN npm install --legacy-peer-deps --no-audit --no-fund
+# Clean install from lockfile — postinstall scripts run normally in Docker
+RUN npm ci --legacy-peer-deps
 
 # Copy source
 COPY . .

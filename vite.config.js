@@ -9,16 +9,28 @@ export default defineConfig({
   },
   build: {
     target: "esnext",
-    chunkSizeWarningLimit: 4000,
+    chunkSizeWarningLimit: 5000,
     rollupOptions: {
       output: {
-        manualChunks: {
-          "vendor-vue":    ["vue", "vue-router", "pinia"],
-          "vendor-three":  ["three"],
-          "vendor-deck":   ["deck.gl", "@deck.gl/core", "@deck.gl/layers", "@deck.gl/geo-layers"],
-          "vendor-luma":   ["@luma.gl/core"],
-          "vendor-charts": ["chart.js", "vue-chartjs"],
-          "vendor-d3":     ["d3", "d3-scale-chromatic"]
+        manualChunks(id) {
+          if (id.includes("node_modules/vue") || id.includes("node_modules/pinia") || id.includes("node_modules/vue-router")) {
+            return "vendor-vue";
+          }
+          if (id.includes("node_modules/three") || id.includes("node_modules/globe.gl") || id.includes("node_modules/three-globe")) {
+            return "vendor-three";
+          }
+          if (id.includes("node_modules/@deck.gl") || id.includes("node_modules/@luma.gl") || id.includes("node_modules/@loaders.gl") || id.includes("node_modules/@math.gl")) {
+            return "vendor-deck";
+          }
+          if (id.includes("node_modules/chart.js") || id.includes("node_modules/vue-chartjs")) {
+            return "vendor-charts";
+          }
+          if (id.includes("node_modules/d3") || id.includes("node_modules/d3-")) {
+            return "vendor-d3";
+          }
+          if (id.includes("node_modules/@fortawesome")) {
+            return "vendor-fa";
+          }
         }
       }
     }
