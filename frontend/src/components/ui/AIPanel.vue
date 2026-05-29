@@ -1,7 +1,7 @@
 <template>
   <div class="ai-panel panel">
     <div class="panel-header">
-      <span>✦</span> AI INTELLIGENCE
+      <i class="fa-solid fa-microchip"></i> AI INTELLIGENCE
       <div class="ai-controls ml-auto">
         <select v-model="aiStore.provider" @change="aiStore.setProvider(aiStore.provider)" class="ai-select">
           <option v-for="(_, p) in aiStore.providers" :key="p" :value="p">{{ p }}</option>
@@ -9,13 +9,15 @@
         <select v-model="aiStore.model" class="ai-select">
           <option v-for="m in currentModels" :key="m" :value="m">{{ m }}</option>
         </select>
-        <button v-if="aiStore.response" class="clear-ai-btn" @click="aiStore.clear()" title="Clear">✕</button>
+        <button v-if="aiStore.response" class="clear-ai-btn" @click="aiStore.clear()" title="Clear">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
     </div>
 
     <div class="ai-body" ref="bodyRef">
       <div v-if="!aiStore.response && !aiStore.streaming && !aiStore.error" class="ai-empty">
-        <div class="ai-empty-icon">✦</div>
+        <i class="fa-solid fa-microchip ai-empty-icon"></i>
         <p>Select a conflict event and click <strong>AI Intelligence Brief</strong> for an analysis.</p>
         <div class="ai-capabilities">
           <span>Situation Assessment</span>
@@ -26,7 +28,7 @@
       </div>
 
       <div v-if="aiStore.error" class="ai-error">
-        <span>⚠</span> {{ aiStore.error }}
+        <i class="fa-solid fa-triangle-exclamation"></i> {{ aiStore.error }}
       </div>
 
       <div v-if="aiStore.response || aiStore.streaming" class="ai-response">
@@ -35,7 +37,9 @@
           <span class="ai-badge">{{ aiStore.lastModel }}</span>
         </div>
         <div class="ai-content" v-html="renderedResponse"></div>
-        <div v-if="aiStore.streaming" class="ai-cursor">▌</div>
+        <div v-if="aiStore.streaming" class="ai-cursor">
+          <i class="fa-solid fa-circle-notch fa-spin"></i>
+        </div>
       </div>
     </div>
   </div>
@@ -106,6 +110,8 @@ watch(() => aiStore.response, async () => {
   cursor: pointer;
   font-size: 10px;
   padding: 0 2px;
+  display: flex;
+  align-items: center;
 }
 .clear-ai-btn:hover { color: #ef4444; }
 
@@ -127,7 +133,7 @@ watch(() => aiStore.response, async () => {
   gap: 8px;
   text-align: center;
 }
-.ai-empty-icon { font-size: 20px; opacity: 0.3; }
+.ai-empty-icon { font-size: 22px; opacity: 0.25; color: #3b82f6; }
 .ai-empty p { font-size: 10px; color: #334155; }
 .ai-empty strong { color: #475569; }
 .ai-capabilities {
@@ -153,6 +159,9 @@ watch(() => aiStore.response, async () => {
   border-radius: 4px;
   font-size: 10px;
   color: #f87171;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .ai-response {}
@@ -199,10 +208,10 @@ watch(() => aiStore.response, async () => {
 }
 
 .ai-cursor {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   color: #3b82f6;
-  animation: blink 0.8s step-end infinite;
-  font-size: 12px;
+  font-size: 11px;
+  margin-top: 4px;
 }
-@keyframes blink { 50% { opacity: 0; } }
 </style>

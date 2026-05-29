@@ -1,16 +1,18 @@
 <template>
   <div class="drilldown panel">
     <div class="panel-header">
-      <span>🔍</span> DRILL-DOWN
+      <i class="fa-solid fa-magnifying-glass-chart"></i> DRILL-DOWN
       <span v-if="event" class="ml-auto flex items-center gap-2">
         <span :class="['badge', severityBadge]">{{ event.severity?.toUpperCase() }}</span>
-        <button class="close-btn" @click="store.clearSelection()">✕</button>
+        <button class="close-btn" @click="store.clearSelection()">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </span>
     </div>
 
     <!-- Empty state -->
     <div v-if="!event" class="empty-state">
-      <div class="empty-icon">📍</div>
+      <i class="fa-solid fa-location-crosshairs empty-icon"></i>
       <p>Click any event on the globe or map to inspect details</p>
       <div v-if="store.topCountries.length" class="top-countries">
         <div class="tc-label">TOP CONFLICT ZONES</div>
@@ -41,8 +43,8 @@
         <div class="detail-type">{{ event.type }}</div>
         <div class="detail-sub" v-if="event.subtype">{{ event.subtype }}</div>
         <div class="detail-meta">
-          <span>📅 {{ event.date }}</span>
-          <span>🌍 {{ event.country }}</span>
+          <span><i class="fa-regular fa-calendar-days"></i> {{ event.date }}</span>
+          <span><i class="fa-solid fa-location-dot"></i> {{ event.country }}</span>
           <span class="source-tag" :class="`src-${event.source?.toLowerCase()}`">
             {{ event.source }}
           </span>
@@ -80,13 +82,13 @@
       <!-- Notes -->
       <div v-if="event.notes && !event.notes.startsWith('http')" class="section">
         <div class="section-label">NOTES</div>
-        <p class="notes-text">{{ event.notes.slice(0, 280) }}{{ event.notes.length > 280 ? '…' : '' }}</p>
+        <p class="notes-text">{{ event.notes.slice(0, 280) }}{{ event.notes.length > 280 ? '...' : '' }}</p>
       </div>
 
       <!-- Source link -->
       <div v-if="event.notes && event.notes.startsWith('http')" class="section">
         <a :href="event.notes" target="_blank" rel="noopener" class="source-link">
-          🔗 View Source Article
+          <i class="fa-solid fa-arrow-up-right-from-square"></i> View Source Article
         </a>
       </div>
 
@@ -105,8 +107,12 @@
 
       <!-- AI Brief button -->
       <button class="ai-brief-btn" @click="requestAIBrief" :disabled="aiStore.streaming">
-        <span v-if="aiStore.streaming">⏳ Analyzing…</span>
-        <span v-else>✦ AI Intelligence Brief</span>
+        <span v-if="aiStore.streaming">
+          <i class="fa-solid fa-circle-notch fa-spin"></i> Analyzing...
+        </span>
+        <span v-else>
+          <i class="fa-solid fa-microchip"></i> AI Intelligence Brief
+        </span>
       </button>
     </div>
   </div>
@@ -208,6 +214,8 @@ function requestAIBrief() {
   font-size: 11px;
   padding: 0 2px;
   line-height: 1;
+  display: flex;
+  align-items: center;
 }
 .close-btn:hover { color: #ef4444; }
 
@@ -221,7 +229,7 @@ function requestAIBrief() {
   align-items: center;
   gap: 8px;
 }
-.empty-icon { font-size: 24px; opacity: 0.4; }
+.empty-icon { font-size: 22px; opacity: 0.3; color: #3b82f6; }
 .empty-state p { font-size: 10px; color: #334155; text-align: center; }
 
 .top-countries { width: 100%; margin-top: 8px; }
@@ -263,7 +271,8 @@ function requestAIBrief() {
 .detail-header {}
 .detail-type { font-size: 12px; font-weight: 700; color: #e2e8f0; margin-bottom: 2px; }
 .detail-sub  { font-size: 10px; color: #64748b; margin-bottom: 4px; }
-.detail-meta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 9px; color: #475569; }
+.detail-meta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 9px; color: #475569; align-items: center; }
+.detail-meta i { font-size: 9px; }
 .source-tag {
   padding: 1px 5px;
   border-radius: 3px;
@@ -326,6 +335,9 @@ function requestAIBrief() {
   font-size: 9px;
   color: #3b82f6;
   text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 .source-link:hover { color: #60a5fa; text-decoration: underline; }
 
@@ -350,6 +362,15 @@ function requestAIBrief() {
   cursor: pointer;
   transition: all 0.15s;
   margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.ai-brief-btn span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .ai-brief-btn:hover:not(:disabled) {
   background: linear-gradient(135deg, rgba(59,130,246,0.25), rgba(168,85,247,0.25));

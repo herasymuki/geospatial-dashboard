@@ -12,7 +12,9 @@
         :key="layer.id"
         :class="['layer-btn', { active: activeLayers[layer.id] }]"
         @click="toggleLayer(layer.id)"
-      >{{ layer.label }}</button>
+      >
+        <i :class="layer.icon"></i> {{ layer.label }}
+      </button>
     </div>
 
     <!-- Tooltip -->
@@ -22,7 +24,7 @@
         <div class="tt-type">{{ tooltip.data?.type }}</div>
         <div class="tt-country">{{ tooltip.data?.country }} · {{ tooltip.data?.date }}</div>
         <div class="tt-fatal" v-if="tooltip.data?.fatalities > 0">
-          ⚠ {{ tooltip.data.fatalities.toLocaleString() }} fatalities
+          <i class="fa-solid fa-triangle-exclamation"></i> {{ tooltip.data.fatalities.toLocaleString() }} fatalities
         </div>
         <div class="tt-actors" v-if="tooltip.data?.actor1">
           {{ tooltip.data.actor1 }}{{ tooltip.data.actor2 ? ' vs ' + tooltip.data.actor2 : '' }}
@@ -63,10 +65,10 @@ const activeLayers = reactive({
 })
 
 const layerToggles = [
-  { id: 'heatmap', label: '🔥 Heat'   },
-  { id: 'scatter', label: '⬤ Points' },
-  { id: 'arcs',    label: '↗ Arcs'   },
-  { id: 'hexagon', label: '⬡ Hex'    },
+  { id: 'heatmap', label: 'Heat',   icon: 'fa-solid fa-fire'          },
+  { id: 'scatter', label: 'Points', icon: 'fa-solid fa-circle-dot'    },
+  { id: 'arcs',    label: 'Arcs',   icon: 'fa-solid fa-arrow-trend-up'},
+  { id: 'hexagon', label: 'Hex',    icon: 'fa-solid fa-hexagon'       },
 ]
 
 function toggleLayer(id) {

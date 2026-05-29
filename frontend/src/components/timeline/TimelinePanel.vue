@@ -1,7 +1,7 @@
 <template>
   <div class="timeline-panel panel">
     <div class="panel-header">
-      <span>📈</span> EVENT TIMELINE
+      <i class="fa-solid fa-chart-line"></i> EVENT TIMELINE
       <div class="tl-tabs">
         <button
           v-for="m in metrics"
@@ -16,10 +16,12 @@
           :key="t.id"
           :class="['tl-tab', { active: activeChartType === t.id }]"
           @click="activeChartType = t.id"
-        >{{ t.label }}</button>
+        >
+          <i :class="t.icon"></i> {{ t.label }}
+        </button>
       </div>
       <span class="ml-auto text-xs" style="color:#475569">
-        {{ store.timelineData.length }} months · {{ store.stats.totalEvents.toLocaleString() }} events
+        {{ store.timelineData.length }} months &middot; {{ store.stats.totalEvents.toLocaleString() }} events
       </span>
     </div>
     <div class="chart-wrap">
@@ -58,8 +60,8 @@ const metrics = [
   { id: 'fatalities', label: 'Fatalities' },
 ]
 const chartTypes = [
-  { id: 'line', label: '〜 Line' },
-  { id: 'bar',  label: '▌ Bar'  },
+  { id: 'line', label: 'Line', icon: 'fa-solid fa-chart-line' },
+  { id: 'bar',  label: 'Bar',  icon: 'fa-solid fa-chart-bar'  },
 ]
 
 const chartData = computed(() => {
@@ -156,6 +158,9 @@ const chartOptions = computed(() => ({
   border: 1px solid transparent;
   cursor: pointer;
   transition: all 0.12s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 .tl-tab:hover  { color: #94a3b8; }
 .tl-tab.active { color: #3b82f6; border-color: #1e3a5f; background: rgba(59,130,246,0.08); }

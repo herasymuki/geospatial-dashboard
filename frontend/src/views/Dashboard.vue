@@ -4,7 +4,7 @@
     <header class="topbar">
       <div class="topbar-left">
         <div class="logo">
-          <span class="logo-icon">⚔</span>
+          <i class="fa-solid fa-shield-halved logo-icon"></i>
           <span class="logo-text">ATHENA <span class="logo-sub">GLOBAL CONFLICTS</span></span>
         </div>
         <div class="view-tabs">
@@ -13,7 +13,10 @@
             :key="v.id"
             :class="['view-tab', { active: store.activeView === v.id }]"
             @click="store.setActiveView(v.id)"
-          >{{ v.label }}</button>
+          >
+            <i :class="v.icon"></i>
+            {{ v.label }}
+          </button>
         </div>
       </div>
       <div class="topbar-right">
@@ -80,9 +83,9 @@ import AIPanel        from '@/components/ui/AIPanel.vue'
 
 const store = useConflictsStore()
 const views = [
-  { id: 'globe', label: '🌍 Globe'    },
-  { id: 'deck',  label: '🗺 Deck Map' },
-  { id: 'split', label: '⊞ Split'    },
+  { id: 'globe', label: 'Globe',    icon: 'fa-solid fa-earth-americas' },
+  { id: 'deck',  label: 'Deck Map', icon: 'fa-solid fa-map'            },
+  { id: 'split', label: 'Split',    icon: 'fa-solid fa-table-columns'  },
 ]
 
 onMounted(() => {
@@ -116,7 +119,7 @@ onMounted(() => {
 }
 .topbar-left, .topbar-right { display: flex; align-items: center; gap: 16px; }
 .logo { display: flex; align-items: center; gap: 8px; }
-.logo-icon { font-size: 18px; }
+.logo-icon { font-size: 16px; color: #3b82f6; }
 .logo-text {
   font-size: 13px;
   font-weight: 700;

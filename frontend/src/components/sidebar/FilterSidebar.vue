@@ -1,12 +1,14 @@
 <template>
   <div class="sidebar">
-    <div class="panel-header"><span>⚙</span> FILTERS</div>
+    <div class="panel-header">
+      <i class="fa-solid fa-sliders"></i> FILTERS
+    </div>
 
     <!-- Refresh button -->
     <div class="filter-section">
       <button class="refresh-btn" @click="store.fetchAllData()" :disabled="store.loading">
-        <span :class="{ spinning: store.loading }">↻</span>
-        {{ store.loading ? 'Loading…' : 'Refresh Data' }}
+        <i :class="['fa-solid fa-rotate-right', { spinning: store.loading }]"></i>
+        {{ store.loading ? 'Loading...' : 'Refresh Data' }}
       </button>
       <div v-if="store.lastUpdated" class="last-updated">
         Updated {{ formatTime(store.lastUpdated) }}
@@ -95,7 +97,7 @@
 
     <!-- Error display -->
     <div v-if="store.error" class="error-box">
-      ⚠ {{ store.error }}
+      <i class="fa-solid fa-triangle-exclamation"></i> {{ store.error }}
     </div>
   </div>
 </template>
@@ -119,9 +121,9 @@ const sources = [
 
 const severities = [
   { id: 'critical', label: 'Critical (100+ fatalities)', color: '#ef4444' },
-  { id: 'high',     label: 'High (20–99)',               color: '#f59e0b' },
-  { id: 'medium',   label: 'Medium (5–19)',              color: '#eab308' },
-  { id: 'low',      label: 'Low (0–4)',                  color: '#3b82f6' },
+  { id: 'high',     label: 'High (20-99)',               color: '#f59e0b' },
+  { id: 'medium',   label: 'Medium (5-19)',              color: '#eab308' },
+  { id: 'low',      label: 'Low (0-4)',                  color: '#3b82f6' },
 ]
 
 const sourceCounts = computed(() => {
@@ -298,14 +300,14 @@ function formatTime(iso) {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
 }
 .refresh-btn:hover:not(:disabled) {
   background: rgba(59, 130, 246, 0.2);
   border-color: #3b82f6;
 }
 .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.spinning { display: inline-block; animation: spin 1s linear infinite; }
+.spinning { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .last-updated {
@@ -323,5 +325,8 @@ function formatTime(iso) {
   border-radius: 4px;
   font-size: 9px;
   color: #f87171;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 </style>
