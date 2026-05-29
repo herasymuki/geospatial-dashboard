@@ -1,17 +1,22 @@
 # ── Stage 1: Build ──────────────────────────────────────────────
-FROM node:20-slim AS builder
+FROM node:20 AS builder
 WORKDIR /app
 
-# Copy manifests first for layer caching
+# Install build dependencies for native modules
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy manifests
 COPY package.json .npmrc ./
 
-# Install all dependencies (including postinstall scripts for esbuild/rollup native binaries)
+# Install dependencies
 RUN npm install --legacy-peer-deps --no-audit --no-fund
 
-# Copy source files
+# Copy source
 COPY . .
 
-# Build Vite app with increased memory
+# Build
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm run build
 
