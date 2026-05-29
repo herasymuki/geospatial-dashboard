@@ -1,13 +1,5 @@
+node_modules
+dist
 .git
-.gitignore
-frontend/node_modules
-frontend/dist
-__pycache__
-*.pyc
-*.pyo
-.env
-.env.*
 *.md
-.athena.md
-deploy.sh
-cloudbuild.yaml
+.env*
