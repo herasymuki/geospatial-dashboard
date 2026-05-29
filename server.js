@@ -2,6 +2,7 @@ const express = require('express');
 const path    = require('path');
 const https   = require('https');
 const http    = require('http');
+const zlib    = require('zlib');
 
 const app  = express();
 const PORT = process.env.PORT || 8080;
@@ -20,22 +21,72 @@ function setCache(key, data, ttlMs) {
   cache[key] = { data, ts: Date.now(), ttl: ttlMs };
 }
 
-// ── Generic fetch helper (Node built-in https/http) ──────────────────────────
+// ── Generic fetch helper ──────────────────────────────────────────────────────
 function fetchUrl(url, opts = {}) {
   return new Promise((resolve, reject) => {
     const lib = url.startsWith('https') ? https : http;
-    const options = { headers: { 'User-Agent': 'global-conflicts-athena/1.0', ...(opts.headers || {}) } };
+    const options = {
+      headers: {
+        'User-Agent': 'global-conflicts-athena/1.0',
+        'Accept': 'application/json, text/plain, */*',
+        ...(opts.headers || {})
+      }
+    };
     const req = lib.get(url, options, (res) => {
-      // Follow redirects
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         return fetchUrl(res.headers.location, opts).then(resolve).catch(reject);
       }
-      let body = '';
-      res.on('data', chunk => body += chunk);
-      res.on('end', () => resolve({ status: res.statusCode, body, headers: res.headers }));
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
+      res.on('end', () => {
+        const buf = Buffer.concat(chunks);
+        const enc = res.headers['content-encoding'];
+        const decompress = enc === 'gzip'    ? zlib.gunzip
+                         : enc === 'deflate' ? zlib.inflate
+                         : enc === 'br'      ? zlib.brotliDecompress
+                         : null;
+        if (decompress) {
+          decompress(buf, (err, decoded) => {
+            if (err) return reject(err);
+            resolve({ status: res.statusCode, body: decoded.toString('utf8'), headers: res.headers });
+          });
+        } else {
+          resolve({ status: res.statusCode, body: buf.toString('utf8'), headers: res.headers });
+        }
+      });
     });
     req.on('error', reject);
-    req.setTimeout(20000, () => { req.destroy(); reject(new Error('Timeout')); });
+    req.setTimeout(25000, () => { req.destroy(); reject(new Error('Timeout')); });
+  });
+}
+
+// POST fetch helper
+function postUrl(url, body, opts = {}) {
+  return new Promise((resolve, reject) => {
+    const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
+    const parsed  = new URL(url);
+    const options = {
+      hostname: parsed.hostname,
+      port:     parsed.port || (url.startsWith('https') ? 443 : 80),
+      path:     parsed.pathname + parsed.search,
+      method:   'POST',
+      headers: {
+        'User-Agent':    'global-conflicts-athena/1.0',
+        'Content-Type':  opts.contentType || 'application/json',
+        'Content-Length': Buffer.byteLength(bodyStr),
+        ...(opts.headers || {})
+      }
+    };
+    const lib = url.startsWith('https') ? https : http;
+    const req = lib.request(options, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => resolve({ status: res.statusCode, body: data }));
+    });
+    req.on('error', reject);
+    req.setTimeout(25000, () => { req.destroy(); reject(new Error('Timeout')); });
+    req.write(bodyStr);
+    req.end();
   });
 }
 
@@ -55,11 +106,7 @@ app.get('/proxy/gdelt', async (req, res) => {
   try {
     const qs = new URLSearchParams({
       query: 'war conflict military attack explosion airstrike casualties',
-      mode: 'artlist',
-      maxrecords: '75',
-      format: 'json',
-      timespan: '7d',
-      sort: 'DateDesc'
+      mode: 'artlist', maxrecords: '75', format: 'json', timespan: '7d', sort: 'DateDesc'
     });
     const r = await fetchUrl(`https://api.gdeltproject.org/api/v2/doc/doc?${qs}`);
     const data = JSON.parse(r.body);
@@ -72,104 +119,102 @@ app.get('/proxy/gdelt', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ROUTE 2: UCDP — GED CSV bulk download, parsed server-side (6-hour cache)
-// Returns last 2 years of events from the public annual CSV
+// ROUTE 2: UCDP — tries REST API v24.1, v23.1, then v22.1 (6-hour cache)
 // ════════════════════════════════════════════════════════════════════════════
 app.get('/proxy/ucdp', async (req, res) => {
   cors(res);
   const cached = getCache('ucdp');
   if (cached) return res.json(cached);
-  try {
-    // UCDP GED v24.0.1 public CSV — no auth required
-    const csvUrl = 'https://ucdp.uu.se/downloads/ged/ged241-csv.zip';
-    // Fallback: use the paginated REST API with a known-working version
-    const apiUrl = 'https://ucdpapi.pcr.uu.se/api/gedevents/24.1?pagesize=1000&page=1';
-    let r;
+  const versions = ['24.1', '23.1', '22.1'];
+  for (const ver of versions) {
     try {
-      r = await fetchUrl(apiUrl);
+      const url = `https://ucdpapi.pcr.uu.se/api/gedevents/${ver}?pagesize=1000&page=1`;
+      const r = await fetchUrl(url);
       if (r.status === 200) {
         const data = JSON.parse(r.body);
-        const result = { Result: data.Result || [], TotalCount: data.TotalCount || 0, source: 'ucdp-api' };
-        setCache('ucdp', result, 6 * 60 * 60 * 1000);
-        return res.json(result);
+        if (data.Result && data.Result.length > 0) {
+          const result = { Result: data.Result, TotalCount: data.TotalCount || data.Result.length, source: `ucdp-api-v${ver}` };
+          setCache('ucdp', result, 6 * 60 * 60 * 1000);
+          return res.json(result);
+        }
       }
-    } catch(e2) { console.warn('UCDP API failed, trying GED endpoint:', e2.message); }
-
-    // Fallback: try v23.1
-    r = await fetchUrl('https://ucdpapi.pcr.uu.se/api/gedevents/23.1?pagesize=1000&page=1');
-    if (r.status === 200) {
-      const data = JSON.parse(r.body);
-      const result = { Result: data.Result || [], TotalCount: data.TotalCount || 0, source: 'ucdp-api-v23' };
-      setCache('ucdp', result, 6 * 60 * 60 * 1000);
-      return res.json(result);
-    }
-    throw new Error(`UCDP API returned ${r.status}`);
-  } catch (e) {
-    console.error('UCDP error:', e.message);
-    res.status(502).json({ error: e.message, Result: [] });
+    } catch (e) { console.warn(`UCDP v${ver} failed:`, e.message); }
   }
+  // Return empty — frontend will use mock data
+  res.status(502).json({ error: 'All UCDP API versions failed', Result: [] });
 });
 
 // ════════════════════════════════════════════════════════════════════════════
 // ROUTE 3: GDACS — UN Global Disaster Alert & Coordination System (15-min cache)
-// Real-time alerts for conflicts, displacement, complex emergencies
 // ════════════════════════════════════════════════════════════════════════════
 app.get('/proxy/gdacs', async (req, res) => {
   cors(res);
   const cached = getCache('gdacs');
   if (cached) return res.json(cached);
   try {
-    // GDACS public RSS feed — no auth, no registration
-    const r = await fetchUrl('https://www.gdacs.org/xml/rss.xml');
-    if (r.status !== 200) throw new Error(`GDACS RSS returned ${r.status}`);
+    // Try JSON API first
+    const apiUrl = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=EQ,TC,FL,VO,WF,DR,TS&alertlevel=Green,Orange,Red&fromDate=2024-01-01&toDate=2099-12-31&pagesize=50';
+    let items = [];
+    try {
+      const r = await fetchUrl(apiUrl);
+      if (r.status === 200) {
+        const data = JSON.parse(r.body);
+        const features = data.features || [];
+        items = features.map((f, i) => {
+          const p = f.properties || {};
+          const coords = f.geometry?.coordinates || [null, null];
+          return {
+            id: `gdacs-${p.eventid || i}`,
+            title: p.htmldescription ? p.htmldescription.replace(/<[^>]*>/g,'').trim() : (p.name || 'GDACS Alert'),
+            description: p.description || '',
+            date: p.fromdate || p.todate || '',
+            url: p.url?.report || p.url?.details || '#',
+            lat: coords[1],
+            lng: coords[0],
+            country: p.country || 'Unknown',
+            eventType: p.eventtype || 'Alert',
+            alertLevel: p.alertlevel || 'Green',
+            severity: p.severity?.value || '',
+            source: 'GDACS'
+          };
+        }).filter(e => e.lat !== null && e.lng !== null);
+      }
+    } catch(e2) { console.warn('GDACS JSON API failed, trying RSS:', e2.message); }
 
-    // Parse XML manually (lightweight, no dependency)
-    const xml = r.body;
-    const items = [];
-    const itemMatches = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
-
-    itemMatches.forEach((item, idx) => {
-      const get = (tag) => {
-        const m = item.match(new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>|<${tag}[^>]*>([^<]*)<\\/${tag}>`));
-        return m ? (m[1] || m[2] || '').trim() : '';
-      };
-      const getAttr = (tag, attr) => {
-        const m = item.match(new RegExp(`<${tag}[^>]*${attr}="([^"]*)"[^>]*>`));
-        return m ? m[1] : '';
-      };
-
-      const title    = get('title');
-      const desc     = get('description');
-      const pubDate  = get('pubDate');
-      const link     = get('link') || getAttr('link', 'href');
-      const lat      = getAttr('geo:Point', '') || '';
-      const latVal   = item.match(/<geo:lat>([^<]*)<\/geo:lat>/)?.[1] || item.match(/<gdacs:latitude>([^<]*)<\/gdacs:latitude>/)?.[1] || '';
-      const lngVal   = item.match(/<geo:long>([^<]*)<\/geo:long>/)?.[1] || item.match(/<gdacs:longitude>([^<]*)<\/gdacs:longitude>/)?.[1] || '';
-      const severity = item.match(/<gdacs:severity[^>]*>([^<]*)<\/gdacs:severity>/)?.[1] || '';
-      const country  = item.match(/<gdacs:country>([^<]*)<\/gdacs:country>/)?.[1] || '';
-      const eventType= item.match(/<gdacs:eventtype>([^<]*)<\/gdacs:eventtype>/)?.[1] || 'Alert';
-      const alertLevel = item.match(/<gdacs:alertlevel>([^<]*)<\/gdacs:alertlevel>/)?.[1] || 'Green';
-
-      if (title) {
-        items.push({
-          id: `gdacs-${idx}`,
-          title,
-          description: desc.replace(/<[^>]*>/g, '').slice(0, 300),
-          date: pubDate,
-          link,
-          lat: parseFloat(latVal) || null,
-          lng: parseFloat(lngVal) || null,
-          severity,
-          country,
-          eventType,
-          alertLevel,
-          source: 'GDACS'
+    // Fallback: RSS XML
+    if (items.length === 0) {
+      const r = await fetchUrl('https://www.gdacs.org/xml/rss.xml');
+      if (r.status === 200) {
+        const xml = r.body;
+        const itemMatches = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
+        itemMatches.forEach((item, idx) => {
+          const get = (tag) => {
+            const m = item.match(new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>|<${tag}[^>]*>([^<]*)<\\/${tag}>`));
+            return m ? (m[1] || m[2] || '').trim() : '';
+          };
+          const title     = get('title');
+          const latVal    = item.match(/<geo:lat>([^<]*)<\/geo:lat>/)?.[1] || item.match(/<gdacs:latitude>([^<]*)<\/gdacs:latitude>/)?.[1] || '';
+          const lngVal    = item.match(/<geo:long>([^<]*)<\/geo:long>/)?.[1] || item.match(/<gdacs:longitude>([^<]*)<\/gdacs:longitude>/)?.[1] || '';
+          const alertLevel = item.match(/<gdacs:alertlevel>([^<]*)<\/gdacs:alertlevel>/)?.[1] || 'Green';
+          const country   = item.match(/<gdacs:country>([^<]*)<\/gdacs:country>/)?.[1] || '';
+          const eventType = item.match(/<gdacs:eventtype>([^<]*)<\/gdacs:eventtype>/)?.[1] || 'Alert';
+          const lat = parseFloat(latVal);
+          const lng = parseFloat(lngVal);
+          if (title && !isNaN(lat) && !isNaN(lng)) {
+            items.push({
+              id: `gdacs-rss-${idx}`, title,
+              description: get('description').replace(/<[^>]*>/g,'').slice(0,300),
+              date: get('pubDate'), url: get('link') || '#',
+              lat, lng, country, eventType, alertLevel,
+              severity: alertLevel, source: 'GDACS'
+            });
+          }
         });
       }
-    });
+    }
 
     const result = { items, count: items.length, source: 'gdacs' };
-    setCache('gdacs', result, 15 * 60 * 1000);
+    if (items.length > 0) setCache('gdacs', result, 15 * 60 * 1000);
     res.json(result);
   } catch (e) {
     console.error('GDACS error:', e.message);
@@ -178,7 +223,7 @@ app.get('/proxy/gdacs', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ROUTE 4: Wikidata SPARQL — ongoing armed conflicts with coordinates (1-hour cache)
+// ROUTE 4: Wikidata SPARQL — ongoing armed conflicts (1-hour cache)
 // ════════════════════════════════════════════════════════════════════════════
 app.get('/proxy/wikidata', async (req, res) => {
   cors(res);
@@ -193,20 +238,18 @@ SELECT DISTINCT ?conflict ?conflictLabel ?startDate ?endDate ?countryLabel ?coor
   OPTIONAL { ?conflict wdt:P17 ?country . }
   OPTIONAL { ?conflict wdt:P625 ?coord . }
   OPTIONAL { ?conflict wdt:P1120 ?casualties . }
-  FILTER NOT EXISTS { ?conflict wdt:P582 ?end . FILTER(?end < "2015-01-01"^^xsd:dateTime) }
+  FILTER NOT EXISTS { ?conflict wdt:P582 ?end . FILTER(?end < "2010-01-01"^^xsd:dateTime) }
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . }
 }
 ORDER BY DESC(?startDate)
-LIMIT 150
-`.trim();
+LIMIT 150`.trim();
 
     const url = `https://query.wikidata.org/sparql?query=${encodeURIComponent(sparql)}&format=json`;
     const r = await fetchUrl(url, { headers: { 'Accept': 'application/sparql-results+json' } });
-    if (r.status !== 200) throw new Error(`Wikidata returned ${r.status}`);
+    if (r.status !== 200) throw new Error(`Wikidata returned ${r.status}: ${r.body.slice(0,200)}`);
 
     const data = JSON.parse(r.body);
     const bindings = data.results?.bindings || [];
-
     const conflicts = bindings.map((b, i) => {
       let lat = null, lng = null;
       if (b.coord?.value) {
@@ -220,11 +263,10 @@ LIMIT 150
         startDate: b.startDate?.value?.slice(0, 10) || '',
         endDate: b.endDate?.value?.slice(0, 10) || '',
         country: b.countryLabel?.value || 'Unknown',
-        lat,
-        lng,
+        lat, lng,
         casualties: parseInt(b.casualties?.value) || 0,
         source: 'Wikidata',
-        status: b.endDate ? 'resolved' : 'ongoing'
+        status: b.endDate?.value ? 'resolved' : 'ongoing'
       };
     });
 
@@ -239,22 +281,20 @@ LIMIT 150
 
 // ════════════════════════════════════════════════════════════════════════════
 // ROUTE 5: UNHCR — Refugee & IDP population flows (24-hour cache)
-// Used for globe arc layer showing displacement flows
 // ════════════════════════════════════════════════════════════════════════════
 app.get('/proxy/unhcr', async (req, res) => {
   cors(res);
   const cached = getCache('unhcr');
   if (cached) return res.json(cached);
   try {
-    // UNHCR Population API v1 — fully open, no key
-    const [refR, idpR] = await Promise.all([
+    const [refR, idpR] = await Promise.allSettled([
       fetchUrl('https://api.unhcr.org/population/v1/refugees/?limit=100&sortBy=individuals&sortOrder=desc&yearFrom=2022'),
       fetchUrl('https://api.unhcr.org/population/v1/idps/?limit=100&sortBy=individuals&sortOrder=desc&yearFrom=2022')
     ]);
 
     let refugees = [], idps = [];
-    if (refR.status === 200) {
-      const d = JSON.parse(refR.body);
+    if (refR.status === 'fulfilled' && refR.value.status === 200) {
+      const d = JSON.parse(refR.value.body);
       refugees = (d.items || []).map(r => ({
         id: `unhcr-ref-${r.id || Math.random()}`,
         type: 'Refugees',
@@ -267,8 +307,8 @@ app.get('/proxy/unhcr', async (req, res) => {
         source: 'UNHCR'
       }));
     }
-    if (idpR.status === 200) {
-      const d = JSON.parse(idpR.body);
+    if (idpR.status === 'fulfilled' && idpR.value.status === 200) {
+      const d = JSON.parse(idpR.value.body);
       idps = (d.items || []).map(r => ({
         id: `unhcr-idp-${r.id || Math.random()}`,
         type: 'IDPs',
@@ -282,8 +322,12 @@ app.get('/proxy/unhcr', async (req, res) => {
       }));
     }
 
-    const result = { refugees, idps, totalRefugees: refugees.reduce((s,r) => s + r.individuals, 0),
-      totalIDPs: idps.reduce((s,r) => s + r.individuals, 0), source: 'unhcr' };
+    const result = {
+      refugees, idps,
+      totalRefugees: refugees.reduce((s, r) => s + r.individuals, 0),
+      totalIDPs: idps.reduce((s, r) => s + r.individuals, 0),
+      source: 'unhcr'
+    };
     setCache('unhcr', result, 24 * 60 * 60 * 1000);
     res.json(result);
   } catch (e) {
@@ -293,8 +337,7 @@ app.get('/proxy/unhcr', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ROUTE 6: RSS — direct server-side XML fetch + parse (15-min cache)
-// BBC World, Al Jazeera, AP News via RSSHub — no third-party service
+// ROUTE 6: RSS — BBC World, Al Jazeera, AP News (15-min cache)
 // ════════════════════════════════════════════════════════════════════════════
 const RSS_FEEDS = [
   { name: 'BBC World',   url: 'https://feeds.bbci.co.uk/news/world/rss.xml' },
@@ -318,8 +361,7 @@ function parseRSSXml(xml, feedName) {
     const desc  = getTag('description').replace(/<[^>]*>/g, '').slice(0, 250);
     const link  = getTag('link') || block.match(/<link>([^<]*)<\/link>/)?.[1] || '';
     const date  = getTag('pubDate');
-    const guid  = getTag('guid') || link;
-    if (title) items.push({ id: `rss-${feedName}-${i}`, title, description: desc, url: link, date, source: feedName, guid });
+    if (title) items.push({ id: `rss-${feedName}-${i}`, title, description: desc, url: link, date, source: feedName });
   });
   return items;
 }
@@ -328,7 +370,6 @@ app.get('/proxy/rss', async (req, res) => {
   cors(res);
   const cached = getCache('rss');
   if (cached) return res.json(cached);
-
   const results = [];
   await Promise.allSettled(RSS_FEEDS.map(async (feed) => {
     try {
@@ -339,11 +380,8 @@ app.get('/proxy/rss', async (req, res) => {
         const text = `${item.title} ${item.description}`.toLowerCase();
         if (CONFLICT_KW.some(k => text.includes(k))) results.push(item);
       });
-    } catch (e) {
-      console.warn(`RSS ${feed.name} failed:`, e.message);
-    }
+    } catch (e) { console.warn(`RSS ${feed.name} failed:`, e.message); }
   }));
-
   results.sort((a, b) => new Date(b.date) - new Date(a.date));
   const result = { items: results, count: results.length };
   if (results.length > 0) setCache('rss', result, 15 * 60 * 1000);
