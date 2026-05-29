@@ -1,22 +1,21 @@
-# Stage 1: Build
-FROM node:20-alpine AS builder
+# ── Stage 1: Build ──────────────────────────────────────────────
+FROM node:20-slim AS builder
 WORKDIR /app
 
-# Copy npmrc first
-COPY .npmrc ./
+# Copy lock files first for better layer caching
+COPY package.json package-lock.json .npmrc ./
 
-# Install dependencies first (layer caching)
-COPY package.json ./
-RUN npm install --legacy-peer-deps --no-audit --no-fund
+# Install dependencies using lock file (faster + deterministic)
+RUN npm ci --ignore-scripts --no-audit --no-fund
 
-# Copy source
+# Copy source files
 COPY . .
 
-# Build with increased memory for large bundles
+# Build Vite app with increased memory
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm run build
 
-# Stage 2: Serve with nginx
+# ── Stage 2: Serve ───────────────────────────────────────────────
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
