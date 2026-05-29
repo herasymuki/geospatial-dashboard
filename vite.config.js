@@ -7,6 +7,22 @@ export default defineConfig({
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) }
   },
-  build: { target: "esnext", chunkSizeWarningLimit: 3000 },
+  build: {
+    target: "esnext",
+    chunkSizeWarningLimit: 4000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-vue": ["vue", "vue-router", "pinia"],
+          "vendor-three": ["three"],
+          "vendor-deck": ["deck.gl", "@deck.gl/core", "@deck.gl/layers", "@deck.gl/geo-layers"],
+          "vendor-luma": ["@luma.gl/core"],
+          "vendor-charts": ["chart.js", "vue-chartjs"],
+          "vendor-d3": ["d3", "d3-scale-chromatic"],
+          "vendor-fa": ["@fortawesome/fontawesome-free"]
+        }
+      }
+    }
+  },
   optimizeDeps: { exclude: ["globe.gl"] }
 });

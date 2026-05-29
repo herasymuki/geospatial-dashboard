@@ -2,9 +2,12 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# Copy npmrc first
+COPY .npmrc ./
+
 # Install dependencies first (layer caching)
 COPY package.json ./
-RUN npm install --legacy-peer-deps
+RUN npm install --legacy-peer-deps --no-audit --no-fund
 
 # Copy source
 COPY . .
