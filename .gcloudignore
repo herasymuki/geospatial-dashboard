@@ -1,0 +1,8 @@
+# This file specifies files NOT to upload to Cloud Build
+# Syntax same as .gitignore
+
+node_modules/
+dist/
+.git/
+*.log
+.env*
