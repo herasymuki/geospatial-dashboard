@@ -1,5 +1,5 @@
 <template>
-  <div class="detail-drawer" @click.self="store.clearSelection()">
+  <div class="detail-drawer">
     <div class="detail-panel">
       <button class="detail-close" @click="store.clearSelection()"><i class="fa-solid fa-xmark"></i></button>
 
