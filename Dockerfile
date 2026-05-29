@@ -2,11 +2,18 @@
 FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
+
+# Copy package files first for layer caching
 COPY frontend/package.json frontend/.npmrc ./
+
+# Install dependencies
 RUN npm install --legacy-peer-deps
 
+# Copy rest of frontend source
 COPY frontend/ ./
-RUN npm run build
+
+# Build with enough memory for large bundles
+RUN NODE_OPTIONS="--max-old-space-size=4096" npm run build
 
 # ─── Stage 2: Python backend + static assets ──────────────────────────────────
 FROM python:3.11-slim AS runtime

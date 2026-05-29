@@ -23,6 +23,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           'deck':    ['@deck.gl/core', '@deck.gl/layers', '@deck.gl/aggregation-layers'],
+          'luma':    ['@luma.gl/core'],
           'globe':   ['globe.gl'],
           'charts':  ['chart.js', 'vue-chartjs'],
           'leaflet': ['leaflet'],
