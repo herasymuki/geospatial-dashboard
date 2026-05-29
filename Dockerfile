@@ -2,27 +2,29 @@
 FROM node:20-slim AS builder
 WORKDIR /app
 
-# Install build dependencies for native modules
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy package manifest and npm config only (no lockfile — fresh install)
 COPY package.json .npmrc ./
-
-# Install dependencies fresh — generates lockfile in container
 RUN npm install --legacy-peer-deps
 
-# Copy source
 COPY . .
 
-# Build
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm run build
 
-# ── Stage 2: Serve ───────────────────────────────────────────────
-FROM nginx:alpine
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# ── Stage 2: Serve via Express (server.js) ───────────────────────
+FROM node:20-slim
+WORKDIR /app
+
+# Copy only production server deps
+COPY package.json ./
+RUN npm install --omit=dev --legacy-peer-deps
+
+# Copy built frontend and server
+COPY --from=builder /app/dist ./dist
+COPY server.js ./
+
 EXPOSE 8080
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["node", "server.js"]
