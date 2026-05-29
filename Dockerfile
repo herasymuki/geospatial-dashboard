@@ -7,11 +7,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy manifests + lockfile
-COPY package.json package-lock.json .npmrc ./
+# Copy package manifest and npm config only (no lockfile — fresh install)
+COPY package.json .npmrc ./
 
-# Clean install from lockfile — postinstall scripts run normally in Docker
-RUN npm ci --legacy-peer-deps
+# Install dependencies fresh — generates lockfile in container
+RUN npm install --legacy-peer-deps
 
 # Copy source
 COPY . .
